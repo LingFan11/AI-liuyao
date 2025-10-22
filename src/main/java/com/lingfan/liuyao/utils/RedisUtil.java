@@ -1,0 +1,599 @@
+package com.lingfan.liuyao.utils;
+
+import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
+import com.lingfan.liuyao.model.dto.RedisData;
+import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.*;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
+
+/**
+ * Redis工具类（优化版）
+ * 提供Redis基础操作和缓存问题解决方案
+ * 
+ * 技术选型：
+ * - 使用StringRedisTemplate（开箱即用，无需配置类）
+ * - 使用Hutool的JSONUtil进行对象序列化
+ * - 存储格式：JSON字符串（Redis中可读性强）
+ * 
+ * 功能：
+ * 1. 基础操作：set、get、delete等
+ * 2. 防缓存穿透：空值缓存
+ * 3. 防缓存击穿：互斥锁、逻辑过期
+ * 4. 防缓存雪崩：随机过期时间
+ * 
+ * @author Liuyao Team
+ * @since 2025-10-22
+ */
+@Slf4j
+@Component
+public class RedisUtil {
+    
+    /**
+     * 使用StringRedisTemplate，无需额外配置
+     * 配合JSONUtil实现对象存储
+     */
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+    
+    /**
+     * 本地锁映射，防止缓存击穿
+     * key: Redis的key, value: 对应的锁
+     */
+    private final Map<String, Lock> locks = new ConcurrentHashMap<>();
+    
+    /**
+     * 线程池，用于异步更新缓存
+     */
+    private final ExecutorService executor = new ThreadPoolExecutor(
+            2, 5, 60L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(100),
+            new ThreadPoolExecutor.CallerRunsPolicy()
+    );
+    
+    /**
+     * 空值标记，用于防止缓存穿透
+     */
+    private static final String NULL_CACHE_VALUE = "NULL";
+    
+    /**
+     * 空值默认过期时间（秒）
+     */
+    private static final long NULL_CACHE_EXPIRE = 300L; // 5分钟
+    
+    // ========== 基础操作 ==========
+    
+    /**
+     * 设置缓存（字符串）
+     * 
+     * @param key 键
+     * @param value 值
+     */
+    public void set(String key, String value) {
+        stringRedisTemplate.opsForValue().set(key, value);
+    }
+    
+    /**
+     * 设置缓存（对象，自动序列化为JSON）
+     * 
+     * @param key 键
+     * @param value 值（对象）
+     */
+    public void setObject(String key, Object value) {
+        String jsonValue = JSONUtil.toJsonStr(value);
+        stringRedisTemplate.opsForValue().set(key, jsonValue);
+    }
+    
+    /**
+     * 设置缓存，带过期时间（字符串）
+     * 
+     * @param key 键
+     * @param value 值
+     * @param timeout 过期时间
+     * @param unit 时间单位
+     */
+    public void set(String key, String value, long timeout, TimeUnit unit) {
+        stringRedisTemplate.opsForValue().set(key, value, timeout, unit);
+    }
+    
+    /**
+     * 设置缓存，带过期时间（对象）
+     * 
+     * @param key 键
+     * @param value 值（对象）
+     * @param timeout 过期时间
+     * @param unit 时间单位
+     */
+    public void setObject(String key, Object value, long timeout, TimeUnit unit) {
+        String jsonValue = JSONUtil.toJsonStr(value);
+        stringRedisTemplate.opsForValue().set(key, jsonValue, timeout, unit);
+    }
+    
+    /**
+     * 获取缓存（字符串）
+     * 
+     * @param key 键
+     * @return 值
+     */
+    public String get(String key) {
+        return stringRedisTemplate.opsForValue().get(key);
+    }
+    
+    /**
+     * 获取缓存（对象，自动反序列化）
+     * 
+     * @param key 键
+     * @param clazz 目标类型
+     * @param <T> 类型
+     * @return 对象
+     */
+    public <T> T getObject(String key, Class<T> clazz) {
+        String jsonValue = stringRedisTemplate.opsForValue().get(key);
+        if (StrUtil.isBlank(jsonValue)) {
+            return null;
+        }
+        return JSONUtil.toBean(jsonValue, clazz);
+    }
+    
+    /**
+     * 删除缓存
+     * 
+     * @param key 键
+     * @return 是否删除成功
+     */
+    public Boolean delete(String key) {
+        return stringRedisTemplate.delete(key);
+    }
+    
+    /**
+     * 判断键是否存在
+     * 
+     * @param key 键
+     * @return 是否存在
+     */
+    public Boolean hasKey(String key) {
+        return stringRedisTemplate.hasKey(key);
+    }
+    
+    /**
+     * 设置过期时间
+     * 
+     * @param key 键
+     * @param timeout 过期时间
+     * @param unit 时间单位
+     * @return 是否设置成功
+     */
+    public Boolean expire(String key, long timeout, TimeUnit unit) {
+        return stringRedisTemplate.expire(key, timeout, unit);
+    }
+    
+    /**
+     * 获取过期时间
+     * 
+     * @param key 键
+     * @return 过期时间（秒）,-1表示永不过期,-2表示键不存在
+     */
+    public Long getExpire(String key) {
+        return stringRedisTemplate.getExpire(key, TimeUnit.SECONDS);
+    }
+    
+    // ========== 防缓存雪崩：随机过期时间 ==========
+    
+    /**
+     * 设置缓存，带随机过期时间（防缓存雪崩）
+     * 过期时间 = baseTimeout + 随机值(0-30%)
+     * 
+     * @param key 键
+     * @param value 值（对象，自动序列化为JSON）
+     * @param baseTimeout 基础过期时间
+     * @param unit 时间单位
+     */
+    public void setWithRandomExpire(String key, Object value, long baseTimeout, TimeUnit unit) {
+        // 使用Hutool计算随机增量（0-30%）
+        long maxDelta = (long) (baseTimeout * 0.3);
+        long randomDelta = RandomUtil.randomLong(0, maxDelta);
+        long finalTimeout = baseTimeout + randomDelta;
+        
+        String jsonValue = JSONUtil.toJsonStr(value);
+        stringRedisTemplate.opsForValue().set(key, jsonValue, finalTimeout, unit);
+        log.debug("设置缓存，随机过期时间：key={}, timeout={}{}", key, finalTimeout, unit);
+    }
+    
+    // ========== 防缓存穿透：空值缓存 ==========
+    
+    /**
+     * 缓存空值（防缓存穿透）
+     * 
+     * @param key 键
+     * @param timeout 过期时间
+     * @param unit 时间单位
+     */
+    public void setNull(String key, long timeout, TimeUnit unit) {
+        stringRedisTemplate.opsForValue().set(key, NULL_CACHE_VALUE, timeout, unit);
+        log.debug("缓存空值：key={}", key);
+    }
+    
+    /**
+     * 缓存空值（使用默认过期时间）
+     * 
+     * @param key 键
+     */
+    public void setNull(String key) {
+        setNull(key, NULL_CACHE_EXPIRE, TimeUnit.SECONDS);
+    }
+    
+    /**
+     * 判断是否是空值缓存
+     * 
+     * @param key 键
+     * @return true=是空值缓存, false=不是
+     */
+    public boolean isNullCache(String key) {
+        String value = get(key);
+        return NULL_CACHE_VALUE.equals(value);
+    }
+    
+    // ========== 防缓存击穿：互斥锁方案 ==========
+    
+    /**
+     * 获取数据，使用互斥锁防止缓存击穿（支持泛型）
+     * 
+     * 流程：
+     * 1. 尝试从缓存获取
+     * 2. 如果缓存不存在，获取锁
+     * 3. 双重检查：再次尝试从缓存获取
+     * 4. 如果还是不存在，查询数据库
+     * 5. 将结果写入缓存（包括空值）
+     * 6. 释放锁
+     * 
+     * @param key 键
+     * @param clazz 目标类型
+     * @param dbFallback 数据库查询函数
+     * @param timeout 缓存过期时间
+     * @param unit 时间单位
+     * @param <T> 类型
+     * @return 数据
+     */
+    public <T> T getWithMutex(String key, Class<T> clazz, Supplier<T> dbFallback, long timeout, TimeUnit unit) {
+        // 1. 尝试从缓存获取
+        String jsonValue = get(key);
+        
+        // 2. 如果缓存存在，直接返回
+        if (StrUtil.isNotBlank(jsonValue)) {
+            // 判断是否是空值缓存
+            if (NULL_CACHE_VALUE.equals(jsonValue)) {
+                log.debug("命中空值缓存：key={}", key);
+                return null;
+            }
+            log.debug("命中缓存：key={}", key);
+            return JSONUtil.toBean(jsonValue, clazz);
+        }
+        
+        // 3. 缓存不存在，获取锁
+        Lock lock = locks.computeIfAbsent(key, k -> new ReentrantLock());
+        
+        try {
+            // 尝试获取锁
+            lock.lock();
+            
+            // 4. 双重检查：再次尝试从缓存获取
+            jsonValue = get(key);
+            if (StrUtil.isNotBlank(jsonValue)) {
+                if (NULL_CACHE_VALUE.equals(jsonValue)) {
+                    return null;
+                }
+                return JSONUtil.toBean(jsonValue, clazz);
+            }
+            
+            // 5. 查询数据库
+            log.debug("缓存未命中，查询数据库：key={}", key);
+            T dbValue = dbFallback.get();
+            
+            // 6. 写入缓存
+            if (dbValue == null) {
+                // 数据库也没有，缓存空值
+                setNull(key);
+            } else {
+                // 写入缓存
+                setWithRandomExpire(key, dbValue, timeout, unit);
+            }
+            
+            return dbValue;
+            
+        } finally {
+            // 7. 释放锁
+            lock.unlock();
+        }
+    }
+    
+    // ========== 防缓存击穿：逻辑过期方案 ==========
+    
+    /**
+     * 设置缓存，使用逻辑过期（防缓存击穿）
+     * 数据永不过期（Redis层面），但存储逻辑过期时间
+     * 
+     * @param key 键
+     * @param value 值
+     * @param timeout 逻辑过期时间
+     * @param unit 时间单位
+     */
+    public void setWithLogicalExpire(String key, Object value, long timeout, TimeUnit unit) {
+        long expireSeconds = unit.toSeconds(timeout);
+        RedisData redisData = RedisData.of(value, expireSeconds);
+        
+        // 设置缓存，永不过期（将RedisData对象序列化为JSON）
+        String jsonValue = JSONUtil.toJsonStr(redisData);
+        stringRedisTemplate.opsForValue().set(key, jsonValue);
+        log.debug("设置逻辑过期缓存：key={}, expireTime={}", key, redisData.getExpireTime());
+    }
+    
+    /**
+     * 获取数据，使用逻辑过期方案（防缓存击穿，支持泛型）
+     * 
+     * 流程：
+     * 1. 从缓存获取数据
+     * 2. 检查逻辑过期时间
+     * 3. 如果未过期，直接返回
+     * 4. 如果已过期，开启独立线程重建缓存，当前请求返回旧数据
+     * 
+     * @param key 键
+     * @param clazz 目标类型
+     * @param dbFallback 数据库查询函数
+     * @param timeout 缓存过期时间
+     * @param unit 时间单位
+     * @param <T> 类型
+     * @return 数据
+     */
+    public <T> T getWithLogicalExpire(String key, Class<T> clazz, Supplier<T> dbFallback, long timeout, TimeUnit unit) {
+        // 1. 从缓存获取数据
+        String jsonValue = get(key);
+        
+        // 2. 如果缓存不存在，查询数据库并缓存
+        if (StrUtil.isBlank(jsonValue)) {
+            log.debug("缓存不存在，查询数据库：key={}", key);
+            T dbValue = dbFallback.get();
+            
+            if (dbValue == null) {
+                setNull(key);
+                return null;
+            }
+            
+            setWithLogicalExpire(key, dbValue, timeout, unit);
+            return dbValue;
+        }
+        
+        // 3. 判断是否是空值缓存
+        if (NULL_CACHE_VALUE.equals(jsonValue)) {
+            return null;
+        }
+        
+        // 4. 解析RedisData
+        RedisData redisData = JSONUtil.toBean(jsonValue, RedisData.class);
+        Object dataObj = redisData.getData();
+        LocalDateTime expireTime = redisData.getExpireTime();
+        
+        // 5. 将data转换为目标类型
+        T data = JSONUtil.toBean(JSONUtil.toJsonStr(dataObj), clazz);
+        
+        // 6. 检查是否过期
+        if (expireTime.isAfter(LocalDateTime.now())) {
+            // 未过期，直接返回
+            log.debug("逻辑过期缓存未过期：key={}", key);
+            return data;
+        }
+        
+        // 7. 已过期，异步更新缓存
+        log.debug("逻辑过期缓存已过期，异步更新：key={}", key);
+        Lock lock = locks.computeIfAbsent(key, k -> new ReentrantLock());
+        
+        // 尝试获取锁
+        if (lock.tryLock()) {
+            try {
+                // 开启独立线程异步更新缓存
+                executor.submit(() -> {
+                    try {
+                        log.debug("异步更新缓存：key={}", key);
+                        T dbValue = dbFallback.get();
+                        
+                        if (dbValue == null) {
+                            setNull(key);
+                        } else {
+                            setWithLogicalExpire(key, dbValue, timeout, unit);
+                        }
+                    } catch (Exception e) {
+                        log.error("异步更新缓存失败：key={}", key, e);
+                    }
+                });
+            } finally {
+                lock.unlock();
+            }
+        }
+        
+        // 8. 返回旧数据
+        return data;
+    }
+    
+    // ========== 哈希操作 ==========
+    
+    /**
+     * 设置哈希字段（对象，自动序列化为JSON）
+     * 
+     * @param key 键
+     * @param hashKey 哈希键
+     * @param value 值
+     */
+    public void hSet(String key, String hashKey, Object value) {
+        String jsonValue = JSONUtil.toJsonStr(value);
+        stringRedisTemplate.opsForHash().put(key, hashKey, jsonValue);
+    }
+    
+    /**
+     * 获取哈希字段（字符串）
+     * 
+     * @param key 键
+     * @param hashKey 哈希键
+     * @return 值
+     */
+    public String hGet(String key, String hashKey) {
+        Object value = stringRedisTemplate.opsForHash().get(key, hashKey);
+        return value != null ? value.toString() : null;
+    }
+    
+    /**
+     * 获取哈希字段（对象，自动反序列化）
+     * 
+     * @param key 键
+     * @param hashKey 哈希键
+     * @param clazz 目标类型
+     * @param <T> 类型
+     * @return 对象
+     */
+    public <T> T hGetObject(String key, String hashKey, Class<T> clazz) {
+        String jsonValue = hGet(key, hashKey);
+        if (StrUtil.isBlank(jsonValue)) {
+            return null;
+        }
+        return JSONUtil.toBean(jsonValue, clazz);
+    }
+    
+    /**
+     * 获取所有哈希字段
+     * 
+     * @param key 键
+     * @return 哈希Map
+     */
+    public Map<Object, Object> hGetAll(String key) {
+        return stringRedisTemplate.opsForHash().entries(key);
+    }
+    
+    /**
+     * 删除哈希字段
+     * 
+     * @param key 键
+     * @param hashKeys 哈希键数组
+     * @return 删除的数量
+     */
+    public Long hDelete(String key, Object... hashKeys) {
+        return stringRedisTemplate.opsForHash().delete(key, hashKeys);
+    }
+    
+    /**
+     * 判断哈希字段是否存在
+     * 
+     * @param key 键
+     * @param hashKey 哈希键
+     * @return 是否存在
+     */
+    public Boolean hHasKey(String key, String hashKey) {
+        return stringRedisTemplate.opsForHash().hasKey(key, hashKey);
+    }
+    
+    // ========== 集合操作 ==========
+    
+    /**
+     * 添加集合元素（字符串）
+     * 
+     * @param key 键
+     * @param values 值数组
+     * @return 添加的数量
+     */
+    public Long sAdd(String key, String... values) {
+        return stringRedisTemplate.opsForSet().add(key, values);
+    }
+    
+    /**
+     * 获取集合所有元素
+     * 
+     * @param key 键
+     * @return 集合
+     */
+    public Set<String> sMembers(String key) {
+        return stringRedisTemplate.opsForSet().members(key);
+    }
+    
+    /**
+     * 判断元素是否在集合中
+     * 
+     * @param key 键
+     * @param value 值
+     * @return 是否存在
+     */
+    public Boolean sIsMember(String key, String value) {
+        return stringRedisTemplate.opsForSet().isMember(key, value);
+    }
+    
+    /**
+     * 移除集合元素
+     * 
+     * @param key 键
+     * @param values 值数组
+     * @return 移除的数量
+     */
+    public Long sRemove(String key, String... values) {
+        return stringRedisTemplate.opsForSet().remove(key, values);
+    }
+    
+    /**
+     * 获取集合大小
+     * 
+     * @param key 键
+     * @return 集合大小
+     */
+    public Long sSize(String key) {
+        return stringRedisTemplate.opsForSet().size(key);
+    }
+    
+    // ========== 递增递减 ==========
+    
+    /**
+     * 递增1
+     * 
+     * @param key 键
+     * @return 递增后的值
+     */
+    public Long increment(String key) {
+        return stringRedisTemplate.opsForValue().increment(key);
+    }
+    
+    /**
+     * 递增指定值
+     * 
+     * @param key 键
+     * @param delta 增量
+     * @return 递增后的值
+     */
+    public Long increment(String key, long delta) {
+        return stringRedisTemplate.opsForValue().increment(key, delta);
+    }
+    
+    /**
+     * 递减1
+     * 
+     * @param key 键
+     * @return 递减后的值
+     */
+    public Long decrement(String key) {
+        return stringRedisTemplate.opsForValue().decrement(key);
+    }
+    
+    /**
+     * 递减指定值
+     * 
+     * @param key 键
+     * @param delta 减量
+     * @return 递减后的值
+     */
+    public Long decrement(String key, long delta) {
+        return stringRedisTemplate.opsForValue().decrement(key, delta);
+    }
+}

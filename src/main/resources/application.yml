@@ -1,0 +1,169 @@
+# ================================
+# 六爻智能解卦系统配置文件
+# ================================
+
+# 应用名称
+spring:
+  application:
+    name: liuyao
+  
+  # 环境配置
+  profiles:
+    active: dev
+  
+  # 数据库配置 - MySQL
+  datasource:
+    url: jdbc:mysql://localhost:3306/liuyao_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 111111
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  # Redis配置（如果Redis未启动，请取消下面的注释）
+  # autoconfigure:
+  #   exclude: org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+    
+    # MongoDB配置（如果MongoDB未启动，请取消下面的注释）
+    # autoconfigure:
+    #   exclude: org.springframework.boot.autoconfigure.data.mongo.MongoAutoConfiguration
+    mongodb:
+      uri: mongodb://localhost:27017/liuyao_memory_db
+      database: liuyao_memory_db
+  
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  
+  # 缓存配置
+  cache:
+    type: redis
+    redis:
+      time-to-live: 3600000
+      cache-null-values: false
+
+# 服务器配置
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# MyBatis-Plus配置
+mybatis-plus:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.lingfan.liuyao.model.entity
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# 阿里云通义千问配置
+langchain4j:
+  community:
+    dashscope:
+      chat-model:
+        api-key: sk-3e99bde543da4ef1ac313d82e7aaae99
+        model-name: qwen3-max
+        temperature: 0.7
+        max-tokens: 2000
+      
+      # 通义千问向量模型配置
+      embedding-model:
+        api-key: sk-3e99bde543da4ef1ac313d82e7aaae99
+        model-name: text-embedding-v3
+      
+      # 流式输出配置
+      streaming-chat-model:
+        api-key: sk-3e99bde543da4ef1ac313d82e7aaae99
+        model-name: qwen3-max
+
+# JWT配置
+liuyao:
+  jwt:
+    secret: liuyaoSecretKey2025ForDivinationSystem
+    expiration: 86400000
+    header: Authorization
+    prefix: 'Bearer '
+  
+  # 业务配置
+  divination:
+    daily-limit: 10
+    vip-daily-limit: 50
+    cache-expire: 3600
+  
+  # 线程池配置
+  thread-pool:
+    core-size: 5
+    max-size: 20
+    queue-capacity: 100
+    keep-alive: 60
+
+# 日志配置
+logging:
+  level:
+    com.lingfan.liuyao: DEBUG
+    org.springframework.security: DEBUG
+  pattern:
+    console: '%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n'
+
+# Knife4j API文档配置
+knife4j:
+  enable: true
+  openapi:
+    title: 六爻智能解卦系统API
+    description: 基于Spring Boot和AI的六爻占卜解卦系统
+    version: 1.0.0
+    contact:
+      name: Liuyao Team
+      email: liuyao@lingfan.com
+
+# SpringDoc配置
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+
+# OpenAPI配置（这个会修改标题）
+openapi:
+  info:
+    title: 六爻智能解卦系统API
+    description: 基于Spring Boot和AI的六爻占卜解卦系统
+    version: 1.0.0
+
+# Pinecone向量数据库配置
+pinecone:
+  api-key: pcsk_5Vi1iS_CD629LKgwpz2bRDVeZDcWsMUfrKUm3ccfZB8Jmx4FbHbyD2f8NnsXy9RUvqsacW
+  host: https://liuyao-knowledge-msol9ui.svc.aped-4627-b74a.pinecone.io
+  index-name: liuyao-knowledge
+  namespace: liuyao
+  dimension: 1024
+  metric: cosine
+  cloud: aws
+  region: us-east-1
+
+# 向量化配置
+vector:
+  embedding-model: text-embedding-v3
+  embedding-dimension: 1024
+  chunk-size: 500
+  chunk-overlap: 50
+  batch-size: 100
