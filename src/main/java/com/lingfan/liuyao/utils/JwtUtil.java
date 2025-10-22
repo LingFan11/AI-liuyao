@@ -206,11 +206,13 @@ public class JwtUtil {
     public String refreshToken(String token) {
         Claims claims = parseToken(token);
         
-        // 移除旧的过期时间
-        claims.remove(Claims.EXPIRATION);
-        claims.remove(Claims.ISSUED_AT);
+        // 创建新的claims，只保留自定义字段（userId, username等）
+        // 注意：Claims对象是不可变的，不能直接修改，需要创建新的Map
+        Map<String, Object> newClaims = new HashMap<>();
+        newClaims.put(CLAIM_USER_ID, claims.get(CLAIM_USER_ID));
+        newClaims.put(CLAIM_USERNAME, claims.get(CLAIM_USERNAME));
         
-        return generateToken(claims);
+        return generateToken(newClaims);
     }
     
     /**
