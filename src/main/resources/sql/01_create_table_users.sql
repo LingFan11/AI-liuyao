@@ -20,8 +20,8 @@ CREATE TABLE users (
     -- 账号信息
     username VARCHAR(50) UNIQUE NOT NULL COMMENT '用户名（唯一）',
     password VARCHAR(100) NOT NULL COMMENT '密码（BCrypt加密）',
-    email VARCHAR(100) UNIQUE DEFAULT NULL COMMENT '邮箱（唯一，可为空）',
-    phone VARCHAR(20) UNIQUE DEFAULT NULL COMMENT '手机号（唯一，可为空）',
+    email VARCHAR(100) UNIQUE NOT NULL COMMENT '邮箱（唯一，可为空）',
+    phone VARCHAR(20) UNIQUE NOT NULL COMMENT '手机号（唯一，可为空）',
     
     -- 个人资料
     nickname VARCHAR(50) DEFAULT NULL COMMENT '昵称',

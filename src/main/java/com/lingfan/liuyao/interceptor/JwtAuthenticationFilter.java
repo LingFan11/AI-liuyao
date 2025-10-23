@@ -83,7 +83,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final List<String> WHITE_LIST = Arrays.asList(
         "/api/user/register",                   // 注册
         "/api/user/login",                      // 登录
+        "/api/user/check-username",             // 检查用户名
+        "/api/user/check-email",                // 检查邮箱
+        "/api/user/check-phone",                // 检查手机号
         "/api/health",                          // 健康检查
+        "/api/test/register/**",                // 注册测试接口（开发阶段）
         "/api/test/config/generate-token",      // 生成测试Token
         "/api/test/config/redis",               // Redis测试
         "/api/test/config/mongodb",             // MongoDB测试

@@ -60,10 +60,14 @@ public class SecurityConfig {
             // 配置授权规则
             .authorizeHttpRequests(authorize -> authorize
                 // 白名单路径：允许所有人访问
+                // 注意：Spring Security会自动去除context-path，所以这里不需要/api前缀
                 .requestMatchers(
-                    "/api/user/register",
-                    "/api/user/login",
-                    "/api/health",
+                    "/user/register",
+                    "/user/login",
+                    "/user/check-username",
+                    "/user/check-email",
+                    "/user/check-phone",
+                    "/health",
                     "/swagger-ui/**",
                     "/v3/api-docs/**",
                     "/doc.html",

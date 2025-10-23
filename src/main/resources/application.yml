@@ -95,6 +95,17 @@ langchain4j:
 
 # JWT配置
 liuyao:
+  # 用户注册配置
+  user:
+    # 是否启用邮箱验证码（默认false，后期开通）
+    email-verify-enabled: false
+    # 是否启用手机验证码（默认false，后期开通）
+    phone-verify-enabled: false
+    # 验证码有效期（秒）
+    verify-code-expire: 300
+    # 验证码长度
+    verify-code-length: 6
+  
   jwt:
     secret: liuyaoSecretKey2025ForDivinationSystem
     expiration: 86400000

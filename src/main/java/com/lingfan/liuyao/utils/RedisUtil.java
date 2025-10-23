@@ -3,6 +3,7 @@ package com.lingfan.liuyao.utils;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.lingfan.liuyao.exception.BusinessException;
 import com.lingfan.liuyao.model.dto.RedisData;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -120,6 +121,18 @@ public class RedisUtil {
     }
     
     /**
+     * 设置缓存，带过期时间（对象，秒为单位）
+     * 便捷方法，避免每次都写TimeUnit.SECONDS
+     * 
+     * @param key 键
+     * @param value 值（对象）
+     * @param seconds 过期时间（秒）
+     */
+    public void set(String key, Object value, long seconds) {
+        setObject(key, value, seconds, TimeUnit.SECONDS);
+    }
+    
+    /**
      * 获取缓存（字符串）
      * 
      * @param key 键
@@ -127,6 +140,38 @@ public class RedisUtil {
      */
     public String get(String key) {
         return stringRedisTemplate.opsForValue().get(key);
+    }
+    
+    /**
+     * 获取缓存（泛型，支持Boolean、Integer等基本类型）
+     * 注意：如果是复杂对象，请使用getObject方法
+     * 
+     * @param key 键
+     * @param <T> 类型
+     * @return 值（自动转换类型）
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T get(String key, Class<T> clazz) {
+        String value = stringRedisTemplate.opsForValue().get(key);
+        if (StrUtil.isBlank(value)) {
+            return null;
+        }
+        
+        // 处理基本类型和包装类型
+        if (clazz == String.class) {
+            return (T) value;
+        } else if (clazz == Boolean.class) {
+            return (T) Boolean.valueOf(value);
+        } else if (clazz == Integer.class) {
+            return (T) Integer.valueOf(value);
+        } else if (clazz == Long.class) {
+            return (T) Long.valueOf(value);
+        } else if (clazz == Double.class) {
+            return (T) Double.valueOf(value);
+        } else {
+            // 其他类型尝试JSON反序列化
+            return JSONUtil.toBean(value, clazz);
+        }
     }
     
     /**
@@ -595,5 +640,94 @@ public class RedisUtil {
      */
     public Long decrement(String key, long delta) {
         return stringRedisTemplate.opsForValue().decrement(key, delta);
+    }
+    
+    // ========== 分布式锁 ==========
+    
+    /**
+     * 尝试获取分布式锁（SETNX）
+     * 
+     * @param key 锁的键
+     * @param value 锁的值（用于释放时验证，建议使用UUID）
+     * @param timeout 锁的过期时间
+     * @param unit 时间单位
+     * @return true=获取成功, false=获取失败
+     */
+    public Boolean setIfAbsent(String key, String value, long timeout, TimeUnit unit) {
+        return stringRedisTemplate.opsForValue().setIfAbsent(key, value, timeout, unit);
+    }
+    
+    /**
+     * 释放分布式锁（需要验证value，防止误删）
+     * 
+     * @param key 锁的键
+     * @param value 锁的值（必须与获取锁时的value一致）
+     * @return true=释放成功, false=释放失败（锁不存在或value不匹配）
+     */
+    public Boolean releaseLock(String key, String value) {
+        String currentValue = get(key);
+        if (value != null && value.equals(currentValue)) {
+            return delete(key);
+        }
+        log.warn("释放锁失败：value不匹配，key={}", key);
+        return false;
+    }
+    
+    /**
+     * 执行带分布式锁的操作
+     * 自动获取锁、执行业务、释放锁
+     * 
+     * 使用示例：
+     * <pre>
+     * String result = redisUtil.executeWithLock(
+     *     "lock:user:register:zhangsan",
+     *     30, TimeUnit.SECONDS,
+     *     () -> {
+     *         // 业务逻辑
+     *         return "success";
+     *     }
+     * );
+     * </pre>
+     * 
+     * @param lockKey 锁的键
+     * @param timeout 锁的过期时间
+     * @param unit 时间单位
+     * @param action 业务逻辑（lambda表达式）
+     * @param <T> 返回值类型
+     * @return 业务逻辑的返回值
+     * @throws BusinessException 获取锁失败时抛出
+     */
+    public <T> T executeWithLock(String lockKey, long timeout, TimeUnit unit, Supplier<T> action) {
+        String lockValue = cn.hutool.core.lang.UUID.fastUUID().toString();
+        Boolean locked = setIfAbsent(lockKey, lockValue, timeout, unit);
+        
+        if (Boolean.FALSE.equals(locked)) {
+            log.warn("获取分布式锁失败：key={}", lockKey);
+            throw new RuntimeException("系统繁忙，请稍后重试");
+        }
+        
+        try {
+            log.debug("获取分布式锁成功：key={}", lockKey);
+            return action.get();
+        } finally {
+            releaseLock(lockKey, lockValue);
+            log.debug("释放分布式锁：key={}", lockKey);
+        }
+    }
+    
+    /**
+     * 执行带分布式锁的操作（无返回值版本）
+     * 
+     * @param lockKey 锁的键
+     * @param timeout 锁的过期时间
+     * @param unit 时间单位
+     * @param action 业务逻辑（Runnable）
+     * @throws BusinessException 获取锁失败时抛出
+     */
+    public void executeWithLock(String lockKey, long timeout, TimeUnit unit, Runnable action) {
+        executeWithLock(lockKey, timeout, unit, () -> {
+            action.run();
+            return null;
+        });
     }
 }
