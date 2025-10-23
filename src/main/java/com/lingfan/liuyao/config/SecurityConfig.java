@@ -1,30 +1,43 @@
 package com.lingfan.liuyao.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lingfan.liuyao.enums.ErrorCode;
+import com.lingfan.liuyao.interceptor.JwtAuthenticationFilter;
+import com.lingfan.liuyao.utils.ApiResponse;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Spring Security配置类（临时版本）
- * 当前配置：允许所有请求通过，不进行认证
+ * Spring Security配置类（完整版）
  * 
- * 说明：
- * - 这是一个临时配置，用于开发阶段测试
- * - 任务1.4会完善此配置，添加JWT认证、权限控制等
+ * 功能：
+ * 1. 配置安全过滤器链
+ * 2. 添加JWT认证过滤器
+ * 3. 配置白名单路径
+ * 4. 禁用CSRF（前后端分离不需要）
+ * 5. 配置无状态会话（不使用Session）
+ * 6. 配置异常处理（401、403）
  * 
  * @author Liuyao Team
- * @since 2025-10-22
+ * @since 2025-10-23
  */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
     
+    @Autowired
+    private JwtAuthenticationFilter jwtAuthenticationFilter;
+    
     /**
      * 配置安全过滤器链
-     * 临时配置：允许所有请求通过
      * 
      * @param http HttpSecurity对象
      * @return SecurityFilterChain
@@ -33,13 +46,78 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // 禁用CSRF（前后端分离不需要）
-                .csrf(AbstractHttpConfigurer::disable)
+            // 禁用CSRF（前后端分离项目不需要）
+            .csrf(AbstractHttpConfigurer::disable)
+            
+            // 禁用CORS（使用CorsConfig统一配置）
+            .cors(AbstractHttpConfigurer::disable)
+            
+            // 配置会话管理：无状态（不创建Session）
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
+            
+            // 配置授权规则
+            .authorizeHttpRequests(authorize -> authorize
+                // 白名单路径：允许所有人访问
+                .requestMatchers(
+                    "/api/user/register",
+                    "/api/user/login",
+                    "/api/health",
+                    "/swagger-ui/**",
+                    "/v3/api-docs/**",
+                    "/doc.html",
+                    "/swagger-resources/**",
+                    "/webjars/**",
+                    "/favicon.ico"
+                ).permitAll()
                 
-                // 允许所有请求通过（临时配置）
-                .authorizeHttpRequests(authorize -> authorize
-                        .anyRequest().permitAll()
-                );
+                // 测试接口：允许所有人访问（生产环境应删除）
+                .requestMatchers("/test/**").permitAll()
+                
+                // 其他所有请求：需要认证
+                .anyRequest().authenticated()
+            )
+            
+            // 添加JWT认证过滤器
+            // 在UsernamePasswordAuthenticationFilter之前执行
+            .addFilterBefore(
+                jwtAuthenticationFilter,
+                UsernamePasswordAuthenticationFilter.class
+            )
+            
+            // 配置异常处理
+            .exceptionHandling(exception -> exception
+                // 未认证时的处理（401）
+                .authenticationEntryPoint((request, response, authException) -> {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json;charset=UTF-8");
+                    
+                    ApiResponse<Void> apiResponse = ApiResponse.error(
+                        ErrorCode.UNAUTHORIZED.getCode(),
+                        "未登录或登录已过期，请先登录"
+                    );
+                    
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    String jsonResponse = objectMapper.writeValueAsString(apiResponse);
+                    response.getWriter().write(jsonResponse);
+                })
+                
+                // 权限不足时的处理（403）
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("application/json;charset=UTF-8");
+                    
+                    ApiResponse<Void> apiResponse = ApiResponse.error(
+                        ErrorCode.PERMISSION_DENIED.getCode(),
+                        "权限不足，无法访问该资源"
+                    );
+                    
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    String jsonResponse = objectMapper.writeValueAsString(apiResponse);
+                    response.getWriter().write(jsonResponse);
+                })
+            );
         
         return http.build();
     }
