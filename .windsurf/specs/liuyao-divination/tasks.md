@@ -495,24 +495,44 @@ public class UserServiceImpl implements UserService {
 
 **📋 任务详情**: 见 `.windsurf/specs/liuyao-divination/task-1.3-utils-development.md`
 
-#### 任务1.4：配置管理和安全基础 [P0]
-- [ ] 创建Spring Security配置类 `SecurityConfig.java`
+#### 任务1.4：配置管理和安全基础 [P0] ✅ **已完成 2025-10-23**
+- [x] 创建Spring Security配置类 `SecurityConfig.java`
   - **位置**: `config/SecurityConfig.java`
-- [ ] 创建JWT认证过滤器 `JwtAuthenticationFilter.java`
+  - **功能**: 白名单配置、JWT过滤器集成、异常处理（401、403）
+- [x] 创建JWT认证过滤器 `JwtAuthenticationFilter.java`
   - **位置**: `interceptor/JwtAuthenticationFilter.java`
-- [ ] 创建跨域配置类 `CorsConfig.java`
+  - **功能**: Token验证、Redis黑名单、用户在线状态、Token自动续期
+- [x] 创建跨域配置类 `CorsConfig.java`
   - **位置**: `config/CorsConfig.java`
-- [ ] 创建Redis配置类 `RedisConfig.java`
+  - **功能**: 支持前端localhost:3000、5173、8080跨域访问
+- [x] 创建Redis配置类 `RedisConfig.java`
   - **位置**: `config/RedisConfig.java`
-- [ ] 创建MongoDB配置类 `MongoConfig.java`
+  - **功能**: JSON序列化器、String序列化器、多级缓存管理器
+- [x] 创建MongoDB配置类 `MongoConfig.java`
   - **位置**: `config/MongoConfig.java`
-- [ ] 创建线程池配置类 `ThreadPoolConfig.java`
+  - **功能**: LocalDateTime转换器、审计功能
+- [x] 创建线程池配置类 `ThreadPoolConfig.java`
   - **位置**: `config/ThreadPoolConfig.java`
-- [ ] 创建日志配置文件 `logback-spring.xml`
+  - **功能**: 异步任务线程池（核心5、最大20、队列100）
+- [x] 创建日志配置文件 `logback-spring.xml`
   - **位置**: `src/main/resources/logback-spring.xml`
-- [ ] 创建配置测试控制器 `ConfigTestController.java`
+  - **功能**: 控制台日志、文件日志、错误日志分离、滚动策略
+- [x] 创建配置测试控制器 `ConfigTestController.java`
   - **位置**: `controller/test/ConfigTestController.java`
-- [ ] 测试配置正确性
+  - **接口**: JWT认证、生成Token、Redis、MongoDB、线程池、黑名单测试
+- [x] 测试配置正确性
+  - **工具**: PowerShell Invoke-WebRequest
+  - **结果**: 10项测试全部通过 ✅
+
+**📋 任务详情**: 见 `.windsurf/specs/liuyao-divination/task-1.4-config-security.md`
+
+**🔑 关键技术**:
+- JWT + Redis黑名单机制（解决Token无法主动失效问题）
+- Token自动续期（剩余<30分钟自动刷新）
+- 用户在线状态管理（30分钟TTL）
+- Hutool工具类统一使用
+- Jackson2JsonRedisSerializer序列化配置
+- 多级缓存策略（用户30min、卦象24h）
 
 ### 阶段二：用户管理模块（第2周前半）
 
