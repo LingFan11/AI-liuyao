@@ -1,7 +1,10 @@
 package com.lingfan.liuyao.service;
 
 import com.lingfan.liuyao.exception.BusinessException;
+import com.lingfan.liuyao.model.dto.request.LoginRequest;
 import com.lingfan.liuyao.model.dto.request.RegisterRequest;
+import com.lingfan.liuyao.model.dto.response.LoginResponse;
+import com.lingfan.liuyao.model.entity.User;
 import com.lingfan.liuyao.model.vo.UserVO;
 
 /**
@@ -59,4 +62,45 @@ public interface UserService {
      * @return true=存在, false=不存在
      */
     boolean isPhoneExists(String phone);
+    
+    /**
+     * 用户登录
+     * 
+     * 业务流程：
+     * 1. 检查Redis锁定状态（登录失败5次锁定30分钟）
+     * 2. 根据账号查询用户（支持用户名/邮箱/手机号）
+     * 3. 检查账号状态（正常/锁定/禁用）
+     * 4. 验证密码（BCrypt）
+     * 5. 密码错误：累加失败次数，5次后锁定账号
+     * 6. 密码正确：
+     *    - 生成JWT Token
+     *    - 更新登录信息（lastLoginTime、lastLoginIp、loginFailedCount=0）
+     *    - 缓存用户信息到Redis
+     *    - 存储会话信息（用户在线状态）
+     * 7. 返回LoginResponse（Token + 用户信息）
+     * 
+     * 异常处理：
+     * - USER_NOT_FOUND: 用户不存在
+     * - ACCOUNT_LOCKED: 账号已锁定（数据库或Redis）
+     * - ACCOUNT_DISABLED: 账号已禁用
+     * - USERNAME_PASSWORD_ERROR: 密码错误
+     * 
+     * @param request 登录请求（account、password、loginIp）
+     * @return 登录响应（Token + 用户基本信息）
+     * @throws BusinessException 各种登录异常
+     */
+    LoginResponse login(LoginRequest request);
+    
+    /**
+     * 根据账号查询用户（支持用户名/邮箱/手机号）
+     * 
+     * 自动判断账号类型：
+     * - 包含@符号 → 邮箱
+     * - 符合手机号正则 → 手机号
+     * - 其他 → 用户名
+     * 
+     * @param account 账号（用户名/邮箱/手机号）
+     * @return 用户信息，不存在返回null
+     */
+    User getUserByAccount(String account);
 }

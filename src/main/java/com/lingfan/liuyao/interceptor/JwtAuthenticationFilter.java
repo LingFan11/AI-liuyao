@@ -88,6 +88,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         "/api/user/check-phone",                // 检查手机号
         "/api/health",                          // 健康检查
         "/api/test/register/**",                // 注册测试接口（开发阶段）
+        "/api/test/login/**",                   // 登录测试接口（开发阶段）
+        "/api/test/util/**",                    // 工具类测试接口（开发阶段）
         "/api/test/config/generate-token",      // 生成测试Token
         "/api/test/config/redis",               // Redis测试
         "/api/test/config/mongodb",             // MongoDB测试

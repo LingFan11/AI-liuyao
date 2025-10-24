@@ -45,6 +45,52 @@ public class CacheConstants {
      */
     public static final String REGISTER_LOCK_PREFIX = "lock:register:";
     
+    // ==================== 登录相关缓存 ====================
+    
+    /**
+     * 登录失败次数缓存前缀
+     * 完整Key: login:failed:{account}
+     */
+    public static final String LOGIN_FAILED_PREFIX = "login:failed:";
+    
+    /**
+     * 账号锁定缓存前缀
+     * 完整Key: login:lock:{account}
+     */
+    public static final String ACCOUNT_LOCK_PREFIX = "login:lock:";
+    
+    /**
+     * 用户会话信息缓存前缀
+     * 完整Key: user:session:{userId}
+     */
+    public static final String USER_SESSION_PREFIX = "user:session:";
+    
+    /**
+     * 登录失败次数过期时间（秒）
+     * 30分钟
+     */
+    public static final long LOGIN_FAILED_TTL = 1800;
+    
+    /**
+     * 账号锁定过期时间（秒）
+     * 30分钟
+     */
+    public static final long ACCOUNT_LOCK_TTL = 1800;
+    
+    /**
+     * 用户会话过期时间（秒）
+     * 30分钟
+     */
+    public static final long USER_SESSION_TTL = 1800;
+    
+    /**
+     * 最大登录失败次数
+     * 连续5次失败后锁定账号
+     */
+    public static final int MAX_LOGIN_FAILED_COUNT = 5;
+    
+    // ==================== 缓存过期时间 ====================
+    
     /**
      * 用户信息缓存过期时间（秒）
      * 30分钟

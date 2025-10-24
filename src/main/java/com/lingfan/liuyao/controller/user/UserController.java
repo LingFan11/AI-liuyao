@@ -1,12 +1,15 @@
 package com.lingfan.liuyao.controller.user;
 
 import com.lingfan.liuyao.enums.ErrorCode;
+import com.lingfan.liuyao.model.dto.request.LoginRequest;
 import com.lingfan.liuyao.model.dto.request.RegisterRequest;
+import com.lingfan.liuyao.model.dto.response.LoginResponse;
 import com.lingfan.liuyao.model.vo.UserVO;
 import com.lingfan.liuyao.service.UserService;
 import com.lingfan.liuyao.utils.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -148,6 +151,96 @@ public class UserController {
         
         log.debug("手机号检查结果，phone={}, available={}", phone, available);
         return ApiResponse.success(available);
+    }
+    
+    // ==================== 登录功能 ====================
+    
+    /**
+     * 用户登录
+     * 
+     * 接口：POST /api/user/login
+     * 
+     * 请求体示例：
+     * {
+     *   "account": "testuser001",     // 支持用户名/邮箱/手机号
+     *   "password": "123456"
+     * }
+     * 
+     * 响应示例：
+     * {
+     *   "code": 200,
+     *   "message": "操作成功",
+     *   "data": {
+     *     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+     *     "userId": 1,
+     *     "username": "testuser001",
+     *     "nickname": "测试用户",
+     *     "avatar": null,
+     *     "level": 1,
+     *     "experience": 0,
+     *     "vipType": 0,
+     *     "vipExpireTime": null,
+     *     "loginTime": "2025-10-24 08:30:00"
+     *   }
+     * }
+     * 
+     * 功能说明：
+     * 1. 支持三种登录方式：用户名/邮箱/手机号
+     * 2. 登录失败5次锁定账号30分钟
+     * 3. 返回JWT Token用于后续请求认证
+     * 4. 记录登录时间和IP
+     * 
+     * @param request 登录请求（account、password）
+     * @param httpRequest HttpServletRequest（获取真实IP）
+     * @return LoginResponse（Token + 用户基本信息）
+     */
+    @PostMapping("/login")
+    @Operation(summary = "用户登录", description = "支持用户名/邮箱/手机号登录，返回JWT Token")
+    public ApiResponse<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest) {
+        
+        log.info("接收登录请求，account={}", request.getAccount());
+        
+        // 获取真实IP（支持代理）
+        String realIp = getRealIp(httpRequest);
+        request.setLoginIp(realIp);
+        
+        // 调用Service进行登录
+        LoginResponse response = userService.login(request);
+        
+        log.info("登录成功，userId={}, username={}", response.getUserId(), response.getUsername());
+        return ApiResponse.success(response);
+    }
+    
+    /**
+     * 获取真实IP地址
+     * 支持Nginx等反向代理
+     * 
+     * @param request HttpServletRequest
+     * @return 真实IP地址
+     */
+    private String getRealIp(HttpServletRequest request) {
+        // 尝试从X-Real-IP获取
+        String ip = request.getHeader("X-Real-IP");
+        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+            return ip;
+        }
+        
+        // 尝试从X-Forwarded-For获取
+        ip = request.getHeader("X-Forwarded-For");
+        if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+            // X-Forwarded-For可能包含多个IP，取第一个
+            int index = ip.indexOf(',');
+            if (index != -1) {
+                return ip.substring(0, index);
+            }
+            return ip;
+        }
+        
+        // 直接获取RemoteAddr
+        ip = request.getRemoteAddr();
+        return ip != null ? ip : "unknown";
     }
     
     // ==================== 预留接口：发送验证码（后期实现） ====================

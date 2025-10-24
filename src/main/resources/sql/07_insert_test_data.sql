@@ -15,10 +15,10 @@ USE liuyao_db;
 -- ================================
 -- 密码均为: 123456 (BCrypt加密后的值需要在应用中生成，这里使用占位符)
 INSERT INTO users (username, password, email, phone, nickname, level, vip_type, status) VALUES
-('testuser1', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z2EHCYIkXXXXXXXXXXXXXXXX', 'test1@liuyao.com', '13800138001', '测试用户1', 1, 0, 0),
-('testuser2', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z2EHCYIkXXXXXXXXXXXXXXXX', 'test2@liuyao.com', '13800138002', '测试用户2', 5, 1, 0),
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z2EHCYIkXXXXXXXXXXXXXXXX', 'admin@liuyao.com', '13800138888', '管理员', 99, 2, 0),
-('vipuser', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z2EHCYIkXXXXXXXXXXXXXXXX', 'vip@liuyao.com', '13900139000', 'VIP用户', 10, 2, 0);
+('testuser1', '$2a$10$CNAiL.JR7YrtBulamhKwvu5KvhIrEn0cOtMQmczKGsrz9wZtVmHa6', 'test1@liuyao.com', '13800138001', '测试用户1', 1, 0, 0),
+('testuser2', '$2a$10$CNAiL.JR7YrtBulamhKwvu5KvhIrEn0cOtMQmczKGsrz9wZtVmHa6', 'test2@liuyao.com', '13800138002', '测试用户2', 5, 1, 0),
+('admin', '$2a$10$CNAiL.JR7YrtBulamhKwvu5KvhIrEn0cOtMQmczKGsrz9wZtVmHa6', 'admin@liuyao.com', '13800138888', '管理员', 99, 2, 0),
+('vipuser', '$2a$10$CNAiL.JR7YrtBulamhKwvu5KvhIrEn0cOtMQmczKGsrz9wZtVmHa6', 'vip@liuyao.com', '13900139000', 'VIP用户', 10, 2, 0);
 
 -- ================================
 -- 2. 插入测试卦象数据
