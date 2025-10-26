@@ -3,7 +3,9 @@ package com.lingfan.liuyao.controller.user;
 import com.lingfan.liuyao.enums.ErrorCode;
 import com.lingfan.liuyao.model.dto.request.LoginRequest;
 import com.lingfan.liuyao.model.dto.request.RegisterRequest;
+import com.lingfan.liuyao.model.dto.request.UpdateProfileRequest;
 import com.lingfan.liuyao.model.dto.response.LoginResponse;
+import com.lingfan.liuyao.model.dto.response.UserProfileResponse;
 import com.lingfan.liuyao.model.vo.UserVO;
 import com.lingfan.liuyao.service.UserService;
 import com.lingfan.liuyao.utils.ApiResponse;
@@ -14,7 +16,10 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 用户控制器
@@ -295,5 +300,164 @@ public class UserController {
         // userService.sendPhoneCode(phone);
         
         return ApiResponse.success("验证码已发送到手机（功能待实现）");
+    }
+    
+    // ==================== 用户信息管理 ====================
+    
+    /**
+     * 获取当前用户信息
+     * 
+     * 接口：GET /api/user/profile
+     * Header: Authorization: Bearer {token}
+     * 
+     * 响应示例：
+     * {
+     *   "code": 200,
+     *   "message": "操作成功",
+     *   "data": {
+     *     "userId": 1,
+     *     "username": "testuser001",
+     *     "email": "tes***@qq.com",          // 脱敏
+     *     "phone": "138****5678",            // 脱敏
+     *     "nickname": "测试用户",
+     *     "avatar": "/files/avatars/1/xxx.jpg",
+     *     "signature": "万事皆可问卦",
+     *     "level": 5,
+     *     "experience": 450,
+     *     "nextLevelExp": 600,
+     *     "vipType": 1,
+     *     "vipExpireTime": "2025-11-26 00:00:00",
+     *     "isVipActive": true,
+     *     "dailyDivinationLimit": 15,
+     *     "dailyDivinationCount": 3,
+     *     "remainingDivinationCount": 12,
+     *     "totalDivinationCount": 58,
+     *     "status": 0,
+     *     "lastLoginTime": "2025-10-26 18:00:00",
+     *     "createdAt": "2025-10-20 10:00:00"
+     *   }
+     * }
+     * 
+     * @param request HttpServletRequest（从Header获取Token）
+     * @return 用户详细信息（脱敏处理）
+     */
+    @GetMapping("/profile")
+    @Operation(summary = "获取用户信息", description = "获取当前登录用户的详细信息")
+    public ApiResponse<UserProfileResponse> getProfile() {
+        // 从SecurityContext中获取userId（由JWT拦截器已验证并存入）
+        Long userId = getCurrentUserId();
+        
+        log.info("获取用户信息，userId={}", userId);
+        
+        UserProfileResponse response = userService.getUserProfile(userId);
+        
+        return ApiResponse.success(response);
+    }
+    
+    /**
+     * 更新用户信息
+     * 
+     * 接口：PUT /api/user/profile
+     * Header: Authorization: Bearer {token}
+     * 
+     * 请求体示例：
+     * {
+     *   "nickname": "新昵称",
+     *   "avatar": "/files/avatars/1/avatar_123456.jpg",
+     *   "signature": "新的个性签名"
+     * }
+     * 
+     * 注意：所有字段都是可选的，只更新非空字段
+     * 
+     * 响应示例：
+     * {
+     *   "code": 200,
+     *   "message": "操作成功",
+     *   "data": {
+     *     // 返回更新后的完整用户信息
+     *   }
+     * }
+     * 
+     * @param updateRequest 更新请求
+     * @param request HttpServletRequest
+     * @return 更新后的用户信息
+     */
+    @PutMapping("/profile")
+    @Operation(summary = "更新用户信息", description = "更新昵称、头像、个性签名")
+    public ApiResponse<UserProfileResponse> updateProfile(
+            @Valid @RequestBody UpdateProfileRequest updateRequest) {
+        
+        // 从SecurityContext中获取userId
+        Long userId = getCurrentUserId();
+        
+        log.info("更新用户信息，userId={}, request={}", userId, updateRequest);
+        
+        UserProfileResponse response = userService.updateProfile(userId, updateRequest);
+        
+        log.info("用户信息更新成功，userId={}", userId);
+        return ApiResponse.success(response);
+    }
+    
+    /**
+     * 上传头像
+     * 
+     * 接口：POST /api/user/avatar
+     * Header: Authorization: Bearer {token}
+     * Content-Type: multipart/form-data
+     * 
+     * 表单参数：
+     * - file: 头像文件（jpg/png/gif，最大2MB）
+     * 
+     * 响应示例：
+     * {
+     *   "code": 200,
+     *   "message": "操作成功",
+     *   "data": "/files/avatars/1/1_1698765432_abc123.jpg"
+     * }
+     * 
+     * @param file 头像文件
+     * @param request HttpServletRequest
+     * @return 头像URL
+     */
+    @PostMapping("/avatar")
+    @Operation(summary = "上传头像", description = "上传用户头像（支持jpg/png/gif，最大2MB）")
+    public ApiResponse<String> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        
+        // 从SecurityContext中获取userId
+        Long userId = getCurrentUserId();
+        
+        log.info("上传头像，userId={}, fileName={}", userId, file.getOriginalFilename());
+        
+        String avatarUrl = userService.uploadAvatar(userId, file);
+        
+        log.info("头像上传成功，userId={}, avatarUrl={}", userId, avatarUrl);
+        return ApiResponse.success(avatarUrl);
+    }
+    
+    /**
+     * 从SecurityContext中获取当前登录用户的userId
+     * 
+     * 说明：JWT拦截器已经验证Token并将userId存入SecurityContext
+     * 这里直接读取即可，无需重复解析Token
+     * 
+     * @return userId
+     * @throws com.lingfan.liuyao.exception.BusinessException 未登录或认证失败
+     */
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        
+        if (authentication == null || authentication.getPrincipal() == null) {
+            log.warn("SecurityContext中无认证信息，用户未登录");
+            throw new com.lingfan.liuyao.exception.BusinessException(ErrorCode.UNAUTHORIZED, "请先登录");
+        }
+        
+        // JWT拦截器存入的是userId（Long类型）
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof Long) {
+            return (Long) principal;
+        }
+        
+        log.error("SecurityContext中的principal类型错误：{}", principal.getClass());
+        throw new com.lingfan.liuyao.exception.BusinessException(ErrorCode.SYSTEM_ERROR, "认证信息异常");
     }
 }

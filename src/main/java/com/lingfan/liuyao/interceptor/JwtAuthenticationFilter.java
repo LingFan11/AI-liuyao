@@ -89,6 +89,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         "/api/health",                          // 健康检查
         "/api/test/register/**",                // 注册测试接口（开发阶段）
         "/api/test/login/**",                   // 登录测试接口（开发阶段）
+        "/api/test/profile/**",                 // 用户信息管理测试接口（开发阶段）
         "/api/test/util/**",                    // 工具类测试接口（开发阶段）
         "/api/test/config/generate-token",      // 生成测试Token
         "/api/test/config/redis",               // Redis测试
@@ -165,6 +166,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             refreshTokenIfNeeded(token, response);
             
             // 8. 构建Authentication对象，存入SecurityContext
+            // 注意：principal存的是userId（Long类型），Controller中可通过SecurityContext获取
             UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(userId, null, new ArrayList<>());
             SecurityContextHolder.getContext().setAuthentication(authentication);

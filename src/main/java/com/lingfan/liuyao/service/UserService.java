@@ -3,9 +3,12 @@ package com.lingfan.liuyao.service;
 import com.lingfan.liuyao.exception.BusinessException;
 import com.lingfan.liuyao.model.dto.request.LoginRequest;
 import com.lingfan.liuyao.model.dto.request.RegisterRequest;
+import com.lingfan.liuyao.model.dto.request.UpdateProfileRequest;
 import com.lingfan.liuyao.model.dto.response.LoginResponse;
+import com.lingfan.liuyao.model.dto.response.UserProfileResponse;
 import com.lingfan.liuyao.model.entity.User;
 import com.lingfan.liuyao.model.vo.UserVO;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 用户服务接口
@@ -103,4 +106,105 @@ public interface UserService {
      * @return 用户信息，不存在返回null
      */
     User getUserByAccount(String account);
+    
+    // ==================== 用户信息管理 ====================
+    
+    /**
+     * 获取用户详细信息
+     * 
+     * 业务流程：
+     * 1. 先查Redis缓存（user:info:userId）
+     * 2. 缓存未命中则查数据库
+     * 3. 检查VIP是否过期，过期则更新状态
+     * 4. 计算用户等级和剩余次数
+     * 5. 缓存到Redis（30分钟）
+     * 6. 返回UserProfileResponse（脱敏处理）
+     * 
+     * @param userId 用户ID
+     * @return 用户详细信息
+     * @throws BusinessException 用户不存在时抛出异常
+     */
+    UserProfileResponse getUserProfile(Long userId);
+    
+    /**
+     * 更新用户信息
+     * 
+     * 业务流程：
+     * 1. 校验参数（昵称长度、签名长度等）
+     * 2. 只更新非空字段
+     * 3. 延迟双删缓存（先删缓存 → 更新DB → 延迟500ms再删）
+     * 4. 返回最新用户信息
+     * 
+     * @param userId 用户ID
+     * @param request 更新请求
+     * @return 更新后的用户信息
+     * @throws BusinessException 参数不合法或用户不存在时抛出异常
+     */
+    UserProfileResponse updateProfile(Long userId, UpdateProfileRequest request);
+    
+    /**
+     * 上传头像
+     * 
+     * 业务流程：
+     * 1. 校验文件类型（jpg/png/gif）
+     * 2. 校验文件大小（最大2MB）
+     * 3. 生成唯一文件名（userId_timestamp.ext）
+     * 4. 保存到本地存储
+     * 5. 返回访问URL
+     * 6. 更新用户表avatar字段
+     * 7. 删除旧头像文件（可选）
+     * 
+     * @param userId 用户ID
+     * @param file 头像文件
+     * @return 头像访问URL
+     * @throws BusinessException 文件类型或大小不符合要求时抛出异常
+     */
+    String uploadAvatar(Long userId, MultipartFile file);
+    
+    /**
+     * 根据ID查询用户（带缓存）
+     * 
+     * 缓存策略：先查Redis，未命中再查DB，结果缓存30分钟
+     * 
+     * @param userId 用户ID
+     * @return 用户信息，不存在返回null
+     */
+    User getUserById(Long userId);
+    
+    /**
+     * 计算用户等级
+     * 
+     * 算法：level = experience / 100 + 1，最大99级
+     * 
+     * @param experience 经验值
+     * @return 等级（1-99）
+     */
+    Integer calculateLevel(Integer experience);
+    
+    /**
+     * 获取每日占卜次数限制
+     * 
+     * - 普通用户：3次
+     * - 月度VIP：15次
+     * - 年度VIP：30次
+     * - VIP过期：3次
+     * 
+     * @param vipType VIP类型
+     * @param isVipActive VIP是否有效
+     * @return 每日次数限制
+     */
+    Integer getDailyDivinationLimit(Integer vipType, Boolean isVipActive);
+    
+    /**
+     * 检查VIP是否有效
+     * 
+     * 业务逻辑：
+     * 1. vipType=0（普通用户）返回false
+     * 2. vipExpireTime为null返回false
+     * 3. vipExpireTime < now返回false并更新数据库
+     * 
+     * @param user 用户对象
+     * @return true=VIP有效, false=已过期或非VIP
+     */
+    Boolean isVipActive(User user);
 }
