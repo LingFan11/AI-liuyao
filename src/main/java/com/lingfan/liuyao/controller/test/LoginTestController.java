@@ -3,7 +3,7 @@ package com.lingfan.liuyao.controller.test;
 import com.lingfan.liuyao.exception.BusinessException;
 import com.lingfan.liuyao.model.dto.request.LoginRequest;
 import com.lingfan.liuyao.model.dto.response.LoginResponse;
-import com.lingfan.liuyao.service.UserService;
+import com.lingfan.liuyao.service.UserAuthService;
 import com.lingfan.liuyao.utils.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,6 +19,9 @@ import java.util.Map;
  * 
  * 注意：仅用于开发和测试环境，生产环境需删除或禁用
  * 
+ * 重构说明（2025-10-26）：
+ * - 已更新为使用UserAuthService（拆分后的Service）
+ * 
  * @author Liuyao Team
  * @since 2025-10-24
  */
@@ -29,7 +32,7 @@ import java.util.Map;
 public class LoginTestController {
     
     @Autowired
-    private UserService userService;
+    private UserAuthService userAuthService;
     
     /**
      * 测试1：正常登录（用户名）
@@ -45,7 +48,7 @@ public class LoginTestController {
         request.setPassword("123456");
         request.setLoginIp("127.0.0.1");
         
-        LoginResponse response = userService.login(request);
+        LoginResponse response = userAuthService.login(request);
         log.info("测试1完成：Token={}", response.getToken().substring(0, 20) + "...");
         
         return ApiResponse.success(response);
@@ -65,7 +68,7 @@ public class LoginTestController {
         request.setPassword("123456");
         request.setLoginIp("127.0.0.1");
         
-        LoginResponse response = userService.login(request);
+        LoginResponse response = userAuthService.login(request);
         log.info("测试2完成：Token={}", response.getToken().substring(0, 20) + "...");
         
         return ApiResponse.success(response);
@@ -85,7 +88,7 @@ public class LoginTestController {
         request.setPassword("123456");
         request.setLoginIp("127.0.0.1");
         
-        LoginResponse response = userService.login(request);
+        LoginResponse response = userAuthService.login(request);
         log.info("测试3完成：Token={}", response.getToken().substring(0, 20) + "...");
         
         return ApiResponse.success(response);
@@ -106,7 +109,7 @@ public class LoginTestController {
         request.setLoginIp("127.0.0.1");
         
         try {
-            userService.login(request);
+            userAuthService.login(request);
             return ApiResponse.success("测试失败：应该抛出异常");
         } catch (BusinessException e) {
             log.info("测试4完成：捕获到异常 code={}, message={}", e.getCode(), e.getMessage());
@@ -135,7 +138,7 @@ public class LoginTestController {
         // 连续5次错误密码
         for (int i = 1; i <= 5; i++) {
             try {
-                userService.login(request);
+                userAuthService.login(request);
             } catch (BusinessException e) {
                 log.info("第{}次登录失败：{}", i, e.getMessage());
                 result.put("attempt" + i, "失败：" + e.getMessage());
@@ -163,7 +166,7 @@ public class LoginTestController {
         request.setLoginIp("127.0.0.1");
         
         try {
-            userService.login(request);
+            userAuthService.login(request);
             return ApiResponse.success("测试失败：账号应该被锁定");
         } catch (BusinessException e) {
             log.info("测试6完成：捕获到锁定异常 code={}, message={}", e.getCode(), e.getMessage());
@@ -185,7 +188,7 @@ public class LoginTestController {
         request.setPassword("123456");
         request.setLoginIp("127.0.0.1");
         
-        LoginResponse response = userService.login(request);
+        LoginResponse response = userAuthService.login(request);
         log.info("测试7完成：VIP类型={}, 等级={}", response.getVipType(), response.getLevel());
         
         return ApiResponse.success(response);

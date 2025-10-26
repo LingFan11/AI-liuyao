@@ -19,6 +19,10 @@ import com.lingfan.liuyao.enums.ErrorCode;
  * }
  * </pre>
  * 
+ * 重构说明（2025-10-26）：
+ * - 删除了重复的message字段，直接使用父类RuntimeException的message
+ * - 避免了字段重复导致的数据不一致问题
+ * 
  * @author Liuyao Team
  * @since 2025-10-22
  */
@@ -27,12 +31,7 @@ public class BusinessException extends RuntimeException {
     /**
      * 错误码
      */
-    private Integer code;
-    
-    /**
-     * 错误消息
-     */
-    private String message;
+    private final Integer code;
     
     /**
      * 构造方法 - 使用默认错误消息
@@ -42,7 +41,6 @@ public class BusinessException extends RuntimeException {
     public BusinessException(String message) {
         super(message);
         this.code = ErrorCode.SYSTEM_ERROR.getCode();
-        this.message = message;
     }
     
     /**
@@ -54,7 +52,6 @@ public class BusinessException extends RuntimeException {
     public BusinessException(Integer code, String message) {
         super(message);
         this.code = code;
-        this.message = message;
     }
     
     /**
@@ -65,7 +62,6 @@ public class BusinessException extends RuntimeException {
     public BusinessException(ErrorCode errorCode) {
         super(errorCode.getMessage());
         this.code = errorCode.getCode();
-        this.message = errorCode.getMessage();
     }
     
     /**
@@ -77,7 +73,6 @@ public class BusinessException extends RuntimeException {
     public BusinessException(ErrorCode errorCode, String customMessage) {
         super(customMessage);
         this.code = errorCode.getCode();
-        this.message = customMessage;
     }
     
     /**
@@ -89,7 +84,6 @@ public class BusinessException extends RuntimeException {
     public BusinessException(String message, Throwable cause) {
         super(message, cause);
         this.code = ErrorCode.SYSTEM_ERROR.getCode();
-        this.message = message;
     }
     
     /**
@@ -101,7 +95,6 @@ public class BusinessException extends RuntimeException {
     public BusinessException(ErrorCode errorCode, Throwable cause) {
         super(errorCode.getMessage(), cause);
         this.code = errorCode.getCode();
-        this.message = errorCode.getMessage();
     }
     
     /**
@@ -111,33 +104,5 @@ public class BusinessException extends RuntimeException {
      */
     public Integer getCode() {
         return code;
-    }
-    
-    /**
-     * 设置错误码
-     * 
-     * @param code 错误码
-     */
-    public void setCode(Integer code) {
-        this.code = code;
-    }
-    
-    /**
-     * 获取错误消息
-     * 
-     * @return 错误消息
-     */
-    @Override
-    public String getMessage() {
-        return message;
-    }
-    
-    /**
-     * 设置错误消息
-     * 
-     * @param message 错误消息
-     */
-    public void setMessage(String message) {
-        this.message = message;
     }
 }

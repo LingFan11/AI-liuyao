@@ -7,7 +7,9 @@ import com.lingfan.liuyao.model.dto.request.UpdateProfileRequest;
 import com.lingfan.liuyao.model.dto.response.LoginResponse;
 import com.lingfan.liuyao.model.dto.response.UserProfileResponse;
 import com.lingfan.liuyao.model.vo.UserVO;
-import com.lingfan.liuyao.service.UserService;
+import com.lingfan.liuyao.service.UserRegisterService;
+import com.lingfan.liuyao.service.UserAuthService;
+import com.lingfan.liuyao.service.UserProfileService;
 import com.lingfan.liuyao.utils.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +33,11 @@ import org.springframework.web.multipart.MultipartFile;
  * @author Liuyao Team
  * @since 2025-10-23
  */
+/**
+ * 重构说明（2025-10-26）：
+ * - 使用拆分后的3个Service替代原来的UserService
+ * - 遵循单一职责原则，降低类之间的耦合度
+ */
 @RestController
 @RequestMapping("/user")
 @Slf4j
@@ -38,7 +45,13 @@ import org.springframework.web.multipart.MultipartFile;
 public class UserController {
     
     @Autowired
-    private UserService userService;
+    private UserRegisterService userRegisterService;
+    
+    @Autowired
+    private UserAuthService userAuthService;
+    
+    @Autowired
+    private UserProfileService userProfileService;
     
     // 验证码开关配置
     @Value("${liuyao.user.email-verify-enabled:false}")
@@ -85,7 +98,7 @@ public class UserController {
             request.getUsername(), request.getEmail(), request.getPhone());
         
         // 调用Service进行注册
-        UserVO userVO = userService.register(request);
+        UserVO userVO = userRegisterService.register(request);
         
         log.info("注册成功，userId={}, username={}", userVO.getId(), userVO.getUsername());
         return ApiResponse.success(userVO);
@@ -111,7 +124,7 @@ public class UserController {
     public ApiResponse<Boolean> checkUsername(@RequestParam String username) {
         log.debug("检查用户名是否可用，username={}", username);
         
-        boolean exists = userService.isUsernameExists(username);
+        boolean exists = userRegisterService.isUsernameExists(username);
         boolean available = !exists;  // 返回是否可用（取反）
         
         log.debug("用户名检查结果，username={}, available={}", username, available);
@@ -131,7 +144,7 @@ public class UserController {
     public ApiResponse<Boolean> checkEmail(@RequestParam String email) {
         log.debug("检查邮箱是否可用，email={}", email);
         
-        boolean exists = userService.isEmailExists(email);
+        boolean exists = userRegisterService.isEmailExists(email);
         boolean available = !exists;
         
         log.debug("邮箱检查结果，email={}, available={}", email, available);
@@ -151,7 +164,7 @@ public class UserController {
     public ApiResponse<Boolean> checkPhone(@RequestParam String phone) {
         log.debug("检查手机号是否可用，phone={}", phone);
         
-        boolean exists = userService.isPhoneExists(phone);
+        boolean exists = userRegisterService.isPhoneExists(phone);
         boolean available = !exists;
         
         log.debug("手机号检查结果，phone={}, available={}", phone, available);
@@ -212,7 +225,7 @@ public class UserController {
         request.setLoginIp(realIp);
         
         // 调用Service进行登录
-        LoginResponse response = userService.login(request);
+        LoginResponse response = userAuthService.login(request);
         
         log.info("登录成功，userId={}, username={}", response.getUserId(), response.getUsername());
         return ApiResponse.success(response);
@@ -349,7 +362,7 @@ public class UserController {
         
         log.info("获取用户信息，userId={}", userId);
         
-        UserProfileResponse response = userService.getUserProfile(userId);
+        UserProfileResponse response = userProfileService.getUserProfile(userId);
         
         return ApiResponse.success(response);
     }
@@ -392,7 +405,7 @@ public class UserController {
         
         log.info("更新用户信息，userId={}, request={}", userId, updateRequest);
         
-        UserProfileResponse response = userService.updateProfile(userId, updateRequest);
+        UserProfileResponse response = userProfileService.updateProfile(userId, updateRequest);
         
         log.info("用户信息更新成功，userId={}", userId);
         return ApiResponse.success(response);
@@ -428,7 +441,7 @@ public class UserController {
         
         log.info("上传头像，userId={}, fileName={}", userId, file.getOriginalFilename());
         
-        String avatarUrl = userService.uploadAvatar(userId, file);
+        String avatarUrl = userProfileService.uploadAvatar(userId, file);
         
         log.info("头像上传成功，userId={}, avatarUrl={}", userId, avatarUrl);
         return ApiResponse.success(avatarUrl);

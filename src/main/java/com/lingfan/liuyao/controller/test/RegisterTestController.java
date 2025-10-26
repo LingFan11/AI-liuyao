@@ -4,7 +4,7 @@ import com.lingfan.liuyao.enums.ErrorCode;
 import com.lingfan.liuyao.exception.BusinessException;
 import com.lingfan.liuyao.model.dto.request.RegisterRequest;
 import com.lingfan.liuyao.model.vo.UserVO;
-import com.lingfan.liuyao.service.UserService;
+import com.lingfan.liuyao.service.UserRegisterService;
 import com.lingfan.liuyao.utils.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +23,9 @@ import java.util.Map;
  * 
  * 访问路径：http://localhost:8080/api/test/register/*
  * 
+ * 重构说明（2025-10-26）：
+ * - 已更新为使用UserRegisterService（拆分后的Service）
+ * 
  * @author Liuyao Team
  * @since 2025-10-23
  */
@@ -33,7 +36,7 @@ import java.util.Map;
 public class RegisterTestController {
     
     @Autowired
-    private UserService userService;
+    private UserRegisterService userRegisterService;
     
     /**
      * 测试1：正常注册（所有字段）
@@ -54,7 +57,7 @@ public class RegisterTestController {
         request.setPhone("13800138001");
         request.setNickname("测试用户001");
         
-        UserVO userVO = userService.register(request);
+        UserVO userVO = userRegisterService.register(request);
         log.info("测试1通过：userId={}", userVO.getId());
         
         return ApiResponse.success(userVO);
@@ -79,7 +82,7 @@ public class RegisterTestController {
         request.setPhone("13800138002");
         // nickname为空，应默认使用username
         
-        UserVO userVO = userService.register(request);
+        UserVO userVO = userRegisterService.register(request);
         log.info("测试2通过：userId={}, nickname={}", userVO.getId(), userVO.getNickname());
         
         return ApiResponse.success(userVO);
@@ -103,7 +106,7 @@ public class RegisterTestController {
         request.setEmail("abc@test.com");
         request.setPhone("13800138003");
         
-        UserVO userVO = userService.register(request);
+        UserVO userVO = userRegisterService.register(request);
         log.info("测试3通过：userId={}, username={}", userVO.getId(), userVO.getUsername());
         
         return ApiResponse.success(userVO);
@@ -127,7 +130,7 @@ public class RegisterTestController {
         request.setEmail("longusername@test.com");
         request.setPhone("13800138004");
         
-        UserVO userVO = userService.register(request);
+        UserVO userVO = userRegisterService.register(request);
         log.info("测试4通过：userId={}, usernameLength={}", 
             userVO.getId(), userVO.getUsername().length());
         
@@ -153,7 +156,7 @@ public class RegisterTestController {
             request.setEmail("duplicate1@test.com");
             request.setPhone("13800138005");
             
-            userService.register(request);
+            userRegisterService.register(request);
             
             log.error("测试5失败：应该抛出异常但没有");
             return ApiResponse.error(ErrorCode.SYSTEM_ERROR, "测试失败：应该抛出异常但没有");
@@ -184,7 +187,7 @@ public class RegisterTestController {
             request.setEmail("testuser001@test.com");  // 与test1重复
             request.setPhone("13800138006");
             
-            userService.register(request);
+            userRegisterService.register(request);
             
             log.error("测试6失败：应该抛出异常但没有");
             return ApiResponse.error(ErrorCode.SYSTEM_ERROR, "测试失败：应该抛出异常但没有");
@@ -215,7 +218,7 @@ public class RegisterTestController {
             request.setEmail("testnew2@test.com");
             request.setPhone("13800138001");  // 与test1重复
             
-            userService.register(request);
+            userRegisterService.register(request);
             
             log.error("测试7失败：应该抛出异常但没有");
             return ApiResponse.error(ErrorCode.SYSTEM_ERROR, "测试失败：应该抛出异常但没有");

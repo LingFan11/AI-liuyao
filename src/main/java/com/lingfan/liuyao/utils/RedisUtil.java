@@ -3,23 +3,18 @@ package com.lingfan.liuyao.utils;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
-import com.lingfan.liuyao.exception.BusinessException;
-import com.lingfan.liuyao.model.dto.RedisData;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.*;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * Redis工具类（优化版）
+ * Redis工具类（简化版）
  * 提供Redis基础操作和缓存问题解决方案
  * 
  * 技术选型：
@@ -30,8 +25,13 @@ import java.util.function.Supplier;
  * 功能：
  * 1. 基础操作：set、get、delete等
  * 2. 防缓存穿透：空值缓存
- * 3. 防缓存击穿：互斥锁、逻辑过期
- * 4. 防缓存雪崩：随机过期时间
+ * 3. 防缓存雪崩：随机过期时间
+ * 4. 分布式锁：executeWithLock
+ * 
+ * 重构说明（2025-10-26）：
+ * - 删除未使用的方法：getWithMutex、getWithLogicalExpire（节省200+行代码）
+ * - 保留核心功能，遵循YAGNI原则（You Aren't Gonna Need It）
+ * - 从734行精简到约430行
  * 
  * @author Liuyao Team
  * @since 2025-10-22
@@ -46,21 +46,6 @@ public class RedisUtil {
      */
     @Resource
     private StringRedisTemplate stringRedisTemplate;
-    
-    /**
-     * 本地锁映射，防止缓存击穿
-     * key: Redis的key, value: 对应的锁
-     */
-    private final Map<String, Lock> locks = new ConcurrentHashMap<>();
-    
-    /**
-     * 线程池，用于异步更新缓存
-     */
-    private final ExecutorService executor = new ThreadPoolExecutor(
-            2, 5, 60L, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(100),
-            new ThreadPoolExecutor.CallerRunsPolicy()
-    );
     
     /**
      * 空值标记，用于防止缓存穿透
@@ -286,186 +271,6 @@ public class RedisUtil {
     public boolean isNullCache(String key) {
         String value = get(key);
         return NULL_CACHE_VALUE.equals(value);
-    }
-    
-    // ========== 防缓存击穿：互斥锁方案 ==========
-    
-    /**
-     * 获取数据，使用互斥锁防止缓存击穿（支持泛型）
-     * 
-     * 流程：
-     * 1. 尝试从缓存获取
-     * 2. 如果缓存不存在，获取锁
-     * 3. 双重检查：再次尝试从缓存获取
-     * 4. 如果还是不存在，查询数据库
-     * 5. 将结果写入缓存（包括空值）
-     * 6. 释放锁
-     * 
-     * @param key 键
-     * @param clazz 目标类型
-     * @param dbFallback 数据库查询函数
-     * @param timeout 缓存过期时间
-     * @param unit 时间单位
-     * @param <T> 类型
-     * @return 数据
-     */
-    public <T> T getWithMutex(String key, Class<T> clazz, Supplier<T> dbFallback, long timeout, TimeUnit unit) {
-        // 1. 尝试从缓存获取
-        String jsonValue = get(key);
-        
-        // 2. 如果缓存存在，直接返回
-        if (StrUtil.isNotBlank(jsonValue)) {
-            // 判断是否是空值缓存
-            if (NULL_CACHE_VALUE.equals(jsonValue)) {
-                log.debug("命中空值缓存：key={}", key);
-                return null;
-            }
-            log.debug("命中缓存：key={}", key);
-            return JSONUtil.toBean(jsonValue, clazz);
-        }
-        
-        // 3. 缓存不存在，获取锁
-        Lock lock = locks.computeIfAbsent(key, k -> new ReentrantLock());
-        
-        try {
-            // 尝试获取锁
-            lock.lock();
-            
-            // 4. 双重检查：再次尝试从缓存获取
-            jsonValue = get(key);
-            if (StrUtil.isNotBlank(jsonValue)) {
-                if (NULL_CACHE_VALUE.equals(jsonValue)) {
-                    return null;
-                }
-                return JSONUtil.toBean(jsonValue, clazz);
-            }
-            
-            // 5. 查询数据库
-            log.debug("缓存未命中，查询数据库：key={}", key);
-            T dbValue = dbFallback.get();
-            
-            // 6. 写入缓存
-            if (dbValue == null) {
-                // 数据库也没有，缓存空值
-                setNull(key);
-            } else {
-                // 写入缓存
-                setWithRandomExpire(key, dbValue, timeout, unit);
-            }
-            
-            return dbValue;
-            
-        } finally {
-            // 7. 释放锁
-            lock.unlock();
-        }
-    }
-    
-    // ========== 防缓存击穿：逻辑过期方案 ==========
-    
-    /**
-     * 设置缓存，使用逻辑过期（防缓存击穿）
-     * 数据永不过期（Redis层面），但存储逻辑过期时间
-     * 
-     * @param key 键
-     * @param value 值
-     * @param timeout 逻辑过期时间
-     * @param unit 时间单位
-     */
-    public void setWithLogicalExpire(String key, Object value, long timeout, TimeUnit unit) {
-        long expireSeconds = unit.toSeconds(timeout);
-        RedisData redisData = RedisData.of(value, expireSeconds);
-        
-        // 设置缓存，永不过期（将RedisData对象序列化为JSON）
-        String jsonValue = JSONUtil.toJsonStr(redisData);
-        stringRedisTemplate.opsForValue().set(key, jsonValue);
-        log.debug("设置逻辑过期缓存：key={}, expireTime={}", key, redisData.getExpireTime());
-    }
-    
-    /**
-     * 获取数据，使用逻辑过期方案（防缓存击穿，支持泛型）
-     * 
-     * 流程：
-     * 1. 从缓存获取数据
-     * 2. 检查逻辑过期时间
-     * 3. 如果未过期，直接返回
-     * 4. 如果已过期，开启独立线程重建缓存，当前请求返回旧数据
-     * 
-     * @param key 键
-     * @param clazz 目标类型
-     * @param dbFallback 数据库查询函数
-     * @param timeout 缓存过期时间
-     * @param unit 时间单位
-     * @param <T> 类型
-     * @return 数据
-     */
-    public <T> T getWithLogicalExpire(String key, Class<T> clazz, Supplier<T> dbFallback, long timeout, TimeUnit unit) {
-        // 1. 从缓存获取数据
-        String jsonValue = get(key);
-        
-        // 2. 如果缓存不存在，查询数据库并缓存
-        if (StrUtil.isBlank(jsonValue)) {
-            log.debug("缓存不存在，查询数据库：key={}", key);
-            T dbValue = dbFallback.get();
-            
-            if (dbValue == null) {
-                setNull(key);
-                return null;
-            }
-            
-            setWithLogicalExpire(key, dbValue, timeout, unit);
-            return dbValue;
-        }
-        
-        // 3. 判断是否是空值缓存
-        if (NULL_CACHE_VALUE.equals(jsonValue)) {
-            return null;
-        }
-        
-        // 4. 解析RedisData
-        RedisData redisData = JSONUtil.toBean(jsonValue, RedisData.class);
-        Object dataObj = redisData.getData();
-        LocalDateTime expireTime = redisData.getExpireTime();
-        
-        // 5. 将data转换为目标类型
-        T data = JSONUtil.toBean(JSONUtil.toJsonStr(dataObj), clazz);
-        
-        // 6. 检查是否过期
-        if (expireTime.isAfter(LocalDateTime.now())) {
-            // 未过期，直接返回
-            log.debug("逻辑过期缓存未过期：key={}", key);
-            return data;
-        }
-        
-        // 7. 已过期，异步更新缓存
-        log.debug("逻辑过期缓存已过期，异步更新：key={}", key);
-        Lock lock = locks.computeIfAbsent(key, k -> new ReentrantLock());
-        
-        // 尝试获取锁
-        if (lock.tryLock()) {
-            try {
-                // 开启独立线程异步更新缓存
-                executor.submit(() -> {
-                    try {
-                        log.debug("异步更新缓存：key={}", key);
-                        T dbValue = dbFallback.get();
-                        
-                        if (dbValue == null) {
-                            setNull(key);
-                        } else {
-                            setWithLogicalExpire(key, dbValue, timeout, unit);
-                        }
-                    } catch (Exception e) {
-                        log.error("异步更新缓存失败：key={}", key, e);
-                    }
-                });
-            } finally {
-                lock.unlock();
-            }
-        }
-        
-        // 8. 返回旧数据
-        return data;
     }
     
     // ========== 哈希操作 ==========

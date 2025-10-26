@@ -4,7 +4,7 @@ import com.lingfan.liuyao.constant.BusinessConstants;
 import com.lingfan.liuyao.model.dto.request.UpdateProfileRequest;
 import com.lingfan.liuyao.model.dto.response.UserProfileResponse;
 import com.lingfan.liuyao.model.entity.User;
-import com.lingfan.liuyao.service.UserService;
+import com.lingfan.liuyao.service.UserProfileService;
 import com.lingfan.liuyao.utils.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,6 +20,9 @@ import java.util.Map;
  * 用户信息管理测试控制器
  * 用于测试任务2.3的所有功能
  * 
+ * 重构说明（2025-10-26）：
+ * - 已更新为使用UserProfileService（拆分后的Service）
+ * 
  * @author Liuyao Team
  * @since 2025-10-26
  */
@@ -30,7 +33,7 @@ import java.util.Map;
 public class ProfileTestController {
     
     @Autowired
-    private UserService userService;
+    private UserProfileService userProfileService;
     
     /**
      * 测试1：获取用户信息（正常情况）
@@ -48,7 +51,7 @@ public class ProfileTestController {
         // 使用测试数据中的userId=68（testuser001）
         Long userId = 68L;
         
-        UserProfileResponse response = userService.getUserProfile(userId);
+        UserProfileResponse response = userProfileService.getUserProfile(userId);
         
         log.info("测试结果：{}", response);
         return ApiResponse.success(response);
@@ -69,7 +72,7 @@ public class ProfileTestController {
         
         try {
             Long userId = 99999L;  // 不存在的用户ID
-            userService.getUserProfile(userId);
+            userProfileService.getUserProfile(userId);
             
             return ApiResponse.error(500, "测试失败：应该抛出异常");
         } catch (Exception e) {
@@ -97,7 +100,7 @@ public class ProfileTestController {
         request.setNickname("测试昵称" + System.currentTimeMillis());
         request.setSignature("这是一个测试签名：" + LocalDateTime.now());
         
-        UserProfileResponse response = userService.updateProfile(userId, request);
+        UserProfileResponse response = userProfileService.updateProfile(userId, request);
         
         log.info("更新成功，新昵称：{}, 新签名：{}", response.getNickname(), response.getSignature());
         return ApiResponse.success(response);
@@ -122,7 +125,7 @@ public class ProfileTestController {
             UpdateProfileRequest request = new UpdateProfileRequest();
             request.setNickname("这是一个超级超级超级超级超级超级长的昵称，肯定会超过20个字符的限制");
             
-            userService.updateProfile(userId, request);
+            userProfileService.updateProfile(userId, request);
             
             return ApiResponse.error(500, "测试失败：应该抛出异常");
         } catch (Exception e) {
@@ -150,7 +153,7 @@ public class ProfileTestController {
             UpdateProfileRequest request = new UpdateProfileRequest();
             request.setNickname("A");  // 只有1个字符
             
-            userService.updateProfile(userId, request);
+            userProfileService.updateProfile(userId, request);
             
             return ApiResponse.error(500, "测试失败：应该抛出异常");
         } catch (Exception e) {
@@ -175,12 +178,12 @@ public class ProfileTestController {
         // 使用userId=4（VIP用户）
         Long userId = 4L;
         
-        User user = userService.getUserById(userId);
+        User user = userProfileService.getUserById(userId);
         if (user == null) {
             return ApiResponse.error(404, "用户不存在");
         }
         
-        Boolean isVipActive = userService.isVipActive(user);
+        Boolean isVipActive = userProfileService.isVipActive(user);
         
         Map<String, Object> result = new HashMap<>();
         result.put("userId", userId);
@@ -216,7 +219,7 @@ public class ProfileTestController {
         int[] experiences = {0, 100, 450, 1000, 5000, 9800, 9900, 10000};
         
         for (int exp : experiences) {
-            Integer level = userService.calculateLevel(exp);
+            Integer level = userProfileService.calculateLevel(exp);
             result.put("经验" + exp, level + "级");
         }
         
@@ -246,22 +249,22 @@ public class ProfileTestController {
         Map<String, Object> result = new HashMap<>();
         
         // 普通用户
-        Integer normalLimit = userService.getDailyDivinationLimit(
+        Integer normalLimit = userProfileService.getDailyDivinationLimit(
             BusinessConstants.VIP_TYPE_NORMAL, false);
         result.put("普通用户", normalLimit + "次");
         
         // 月度VIP（有效）
-        Integer monthLimit = userService.getDailyDivinationLimit(
+        Integer monthLimit = userProfileService.getDailyDivinationLimit(
             BusinessConstants.VIP_TYPE_MONTH, true);
         result.put("月度VIP", monthLimit + "次");
         
         // 年度VIP（有效）
-        Integer yearLimit = userService.getDailyDivinationLimit(
+        Integer yearLimit = userProfileService.getDailyDivinationLimit(
             BusinessConstants.VIP_TYPE_YEAR, true);
         result.put("年度VIP", yearLimit + "次");
         
         // 年度VIP（已过期）
-        Integer expiredLimit = userService.getDailyDivinationLimit(
+        Integer expiredLimit = userProfileService.getDailyDivinationLimit(
             BusinessConstants.VIP_TYPE_YEAR, false);
         result.put("年度VIP（过期）", expiredLimit + "次");
         
@@ -283,7 +286,7 @@ public class ProfileTestController {
         log.info("【测试9】数据脱敏");
         
         Long userId = 68L;
-        UserProfileResponse response = userService.getUserProfile(userId);
+        UserProfileResponse response = userProfileService.getUserProfile(userId);
         
         Map<String, Object> result = new HashMap<>();
         result.put("原始userId", userId);
@@ -311,15 +314,15 @@ public class ProfileTestController {
         Long userId = 68L;
         
         long start1 = System.currentTimeMillis();
-        UserProfileResponse result1 = userService.getUserProfile(userId);
+        UserProfileResponse result1 = userProfileService.getUserProfile(userId);
         long time1 = System.currentTimeMillis() - start1;
         
         long start2 = System.currentTimeMillis();
-        UserProfileResponse result2 = userService.getUserProfile(userId);
+        UserProfileResponse result2 = userProfileService.getUserProfile(userId);
         long time2 = System.currentTimeMillis() - start2;
         
         long start3 = System.currentTimeMillis();
-        UserProfileResponse result3 = userService.getUserProfile(userId);
+        UserProfileResponse result3 = userProfileService.getUserProfile(userId);
         long time3 = System.currentTimeMillis() - start3;
         
         Map<String, Object> result = new HashMap<>();
@@ -350,7 +353,7 @@ public class ProfileTestController {
         UpdateProfileRequest request = new UpdateProfileRequest();
         request.setSignature("延迟双删测试：" + System.currentTimeMillis());
         
-        UserProfileResponse response = userService.updateProfile(userId, request);
+        UserProfileResponse response = userProfileService.updateProfile(userId, request);
         
         Map<String, Object> result = new HashMap<>();
         result.put("更新成功", true);
