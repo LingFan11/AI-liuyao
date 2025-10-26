@@ -91,13 +91,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         "/api/test/login/**",                   // 登录测试接口（开发阶段）
         "/api/test/profile/**",                 // 用户信息管理测试接口（开发阶段）
         "/api/test/util/**",                    // 工具类测试接口（开发阶段）
+        "/api/test/auth/public",                // 公开测试接口（无需认证）
         "/api/test/config/generate-token",      // 生成测试Token
         "/api/test/config/redis",               // Redis测试
         "/api/test/config/mongodb",             // MongoDB测试
         "/api/test/config/async",               // 线程池测试
         "/api/test/config/cors",                // 跨域测试
         "/api/test/config/logout-test",         // 登出测试
-        // 注意：/api/test/config/jwt 不在白名单中，需要JWT认证
+        // 注意：/api/test/config/jwt 和 /api/test/auth/** 不在白名单中，需要JWT认证
         "/swagger-ui/**",                       // Swagger UI
         "/v3/api-docs/**",                      // API文档
         "/doc.html",                            // Knife4j文档

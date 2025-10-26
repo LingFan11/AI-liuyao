@@ -258,7 +258,12 @@ public class UtilTestController {
     
     /**
      * 测试Redis防缓存击穿（互斥锁）
+     * 
+     * ⚠️ 已删除（2025-10-26重构）
+     * 原因：RedisUtil.getWithMutex()方法已删除（未使用）
+     * 如需测试缓存击穿，请使用业务Service中的实际实现
      */
+    /*
     @GetMapping("/redis/mutex")
     @Operation(summary = "测试Redis互斥锁", description = "测试防缓存击穿功能（互斥锁方案）")
     public ApiResponse<Map<String, Object>> testRedisMutex(
@@ -287,6 +292,7 @@ public class UtilTestController {
         
         return ApiResponse.success("互斥锁测试成功", result);
     }
+    */
     
     /**
      * 测试Redis防缓存雪崩（随机过期时间）

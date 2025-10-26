@@ -11,14 +11,18 @@
 USE liuyao_db;
 
 -- ================================
--- 1. 插入测试用户
+-- 1. 插入测试用户（用于任务2.4 RBAC权限测试）
 -- ================================
--- 密码均为: 123456 (BCrypt加密后的值需要在应用中生成，这里使用占位符)
-INSERT INTO users (username, password, email, phone, nickname, level, vip_type, status) VALUES
-('testuser1', '$2a$10$CNAiL.JR7YrtBulamhKwvu5KvhIrEn0cOtMQmczKGsrz9wZtVmHa6', 'test1@liuyao.com', '13800138001', '测试用户1', 1, 0, 0),
-('testuser2', '$2a$10$CNAiL.JR7YrtBulamhKwvu5KvhIrEn0cOtMQmczKGsrz9wZtVmHa6', 'test2@liuyao.com', '13800138002', '测试用户2', 5, 1, 0),
-('admin', '$2a$10$CNAiL.JR7YrtBulamhKwvu5KvhIrEn0cOtMQmczKGsrz9wZtVmHa6', 'admin@liuyao.com', '13800138888', '管理员', 99, 2, 0),
-('vipuser', '$2a$10$CNAiL.JR7YrtBulamhKwvu5KvhIrEn0cOtMQmczKGsrz9wZtVmHa6', 'vip@liuyao.com', '13900139000', 'VIP用户', 10, 2, 0);
+-- 测试用户密码统一为: 123456 (BCrypt加密后的值)
+-- test_user / 123456 - ID:1 普通用户，对应角色：user
+-- vip_user / 123456 - ID:2 月度VIP，对应角色：vip_month
+-- admin_user / 123456 - ID:3 管理员，对应角色：admin
+-- year_vip_user / 123456 - ID:4 年度VIP，对应角色：vip_year
+INSERT INTO users (id, username, password, email, phone, nickname, level, vip_type, status) VALUES
+(1, 'test_user', '$2a$10$EsGp91bslbHr3s/3vPxaJuO2JKqpIjsbp72jax.zbQFmK1oM9cVm.', 'test@liuyao.com', '13800000001', '普通测试用户', 1, 0, 0),
+(2, 'vip_user', '$2a$10$EsGp91bslbHr3s/3vPxaJuO2JKqpIjsbp72jax.zbQFmK1oM9cVm.', 'vip@liuyao.com', '13800000002', '月度VIP用户', 5, 1, 0),
+(3, 'admin_user', '$2a$10$EsGp91bslbHr3s/3vPxaJuO2JKqpIjsbp72jax.zbQFmK1oM9cVm.', 'admin@liuyao.com', '13800000003', '管理员用户', 99, 2, 0),
+(4, 'year_vip_user', '$2a$10$EsGp91bslbHr3s/3vPxaJuO2JKqpIjsbp72jax.zbQFmK1oM9cVm.', 'yearvip@liuyao.com', '13800000004', '年度VIP用户', 10, 2, 0);
 
 -- ================================
 -- 2. 插入测试卦象数据
@@ -206,7 +210,7 @@ INSERT INTO case_studies (title, category, question, hexagram_result, hexagram_c
 -- ================================
 
 SELECT '=== Test Data Summary ===' AS '';
-SELECT COUNT(*) AS 'Test Users' FROM users WHERE username LIKE 'test%' OR username IN ('admin', 'vipuser');
+SELECT COUNT(*) AS 'Test Users' FROM users WHERE username IN ('test_user', 'vip_user', 'admin_user', 'year_vip_user');
 SELECT COUNT(*) AS 'Test Hexagrams' FROM hexagrams;
 SELECT COUNT(*) AS 'Test Interpretations' FROM interpretations;
 SELECT COUNT(*) AS 'Test Histories' FROM divination_histories;
@@ -215,7 +219,8 @@ SELECT '' AS '';
 SELECT '✅ Test data inserted successfully!' AS Status;
 SELECT '' AS '';
 SELECT '📝 Notes:' AS '';
-SELECT '1. 测试用户密码均为: 123456 (需在应用中使用BCrypt加密)' AS '';
-SELECT '2. 测试卦象包含完整的卦宫、世应、用神体系数据' AS '';
-SELECT '3. signature字段为示例值，实际应由应用层计算生成' AS '';
-SELECT '4. 测试解释包含用神/元神/忌神/旺衰等专业分析' AS '';
+SELECT '1. 测试用户密码均为: 123456 (BCrypt已加密)' AS '';
+SELECT '2. 测试用户ID固定(1-4)，对应任务2.4 RBAC权限测试' AS '';
+SELECT '3. 测试卦象包含完整的卦宫、世应、用神体系数据' AS '';
+SELECT '4. signature字段为示例值，实际应由应用层计算生成' AS '';
+SELECT '5. 测试解释包含用神/元神/忌神/旺衰等专业分析' AS '';

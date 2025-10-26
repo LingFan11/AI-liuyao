@@ -76,9 +76,10 @@ public class SecurityConfig {
                     "/favicon.ico"
                 ).permitAll()
                 
-                // 测试接口：允许所有人访问（生产环境应删除）
-                .requestMatchers("/test/**").permitAll()
+                // 测试接口中的公开接口（无需认证）
+                .requestMatchers("/test/auth/public").permitAll()
                 
+                // 其他测试接口由AuthenticationInterceptor控制
                 // 其他所有请求：需要认证
                 .anyRequest().authenticated()
             )
