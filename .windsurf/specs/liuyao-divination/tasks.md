@@ -631,124 +631,350 @@ public class UserServiceImpl implements UserService {
 - 自定义注解 + HandlerInterceptor
 - AND/OR逻辑灵活控制权限
 
-### 阶段三：起卦核心功能（第2周后半）
+### 阶段三：起卦核心功能（第3周）🆕 **2025-10-28更新 - 基于30个核心功能+Linus式架构优化**
 
-#### 任务3.1：起卦基础架构 [P0]
-- [ ] 创建爻实体类 `Yao.java`
+> **设计理念**：
+> - 固有属性（Yao）与计算属性（YaoState）彻底分离
+> - 64卦数据程序生成，而不是手写SQL
+> - 知识库100%覆盖knowledge-liuyao01.md和liuyao02.md
+
+#### 任务3.1：基础数据结构（Linus式优化）[P0]
+
+**📋 设计原则**：
+- 固有属性（Yao）与计算属性（YaoState）彻底分离
+- 不可变对象设计，避免状态混乱
+- 缓存计算结果，避免重复计算
+
+**子任务3.1.1：核心枚举类（8个枚举）**
+
+- [ ] **BaGua.java** - 八卦枚举
+  - **位置**: `enums/BaGua.java`
+  - **内容**: 乾、兑、离、震、巽、坎、艮、坤（8个）
+  - **知识库**: knowledge-liuyao01.md (10-104行)
+
+- [ ] **TianGan.java** - 天干枚举
+  - **位置**: `enums/TianGan.java`
+  - **内容**: 甲乙丙丁戊己庚辛壬癸（10个）
+
+- [ ] **DiZhi.java** - 地支枚举
+  - **位置**: `enums/DiZhi.java`
+  - **内容**: 子丑寅卯辰巳午未申酉戌亥（12个）
+
+- [ ] **WuXing.java** - 五行枚举
+  - **位置**: `enums/WuXing.java`
+  - **内容**: 金木水火土（5个）
+  - **方法**: `getChangSheng()`, `getDiWang()`, `getMuKu()`, `getJueDi()`, `sheng()`, `ke()`
+  - **知识库**: knowledge-liuyao08.md (49-223行)
+
+- [ ] **LiuQin.java** - 六亲枚举
+  - **位置**: `enums/LiuQin.java`
+  - **内容**: 父母、兄弟、子孙、妻财、官鬼（5个）
+
+- [ ] **LiuShen.java** - 六神枚举
+  - **位置**: `enums/LiuShen.java`
+  - **内容**: 青龙、朱雀、勾陈、螣蛇、白虎、玄武（6个）
+  - **方法**: `getByRiGan(TianGan)` - 根据日干获取六神配置
+
+- [ ] **WangShuai.java** - 旺衰枚举
+  - **位置**: `enums/WangShuai.java`
+  - **内容**: 旺、相、休、囚、死（5个，含力量权重）
+
+- [ ] **ZhanBuLeiXing.java** - 占卜类型枚举
+  - **位置**: `enums/ZhanBuLeiXing.java`
+  - **内容**: 功名、财运、婚姻、疾病、出行等（15+个）
+  - **知识库**: knowledge-liuyao02.md (348-397行)
+
+**子任务3.1.2：固有属性实体类**
+
+- [ ] **Yao.java** - 爻实体（不可变对象）
   - **位置**: `model/entity/Yao.java`
-- [ ] 创建起卦请求DTO `DivinationRequest.java`
-  - **位置**: `model/dto/request/DivinationRequest.java`
-- [ ] 创建起卦响应DTO `DivinationResponse.java`
-  - **位置**: `model/dto/response/DivinationResponse.java`
-- [ ] 定义起卦方法接口 `DivinationMethod.java`
-  - **位置**: `service/divination/DivinationMethod.java`
-- [ ] 创建起卦上下文 `DivinationContext.java`
+  - **属性**: `weiZhi`, `diZhi`, `liuQin`, `isDong`, `bianYao`
+  - **特点**: 只有getter，无setter（不可变对象）
+
+- [ ] **GuaXiang.java** - 卦象实体（不可变对象）
+  - **位置**: `model/entity/GuaXiang.java`
+  - **属性**: `id`, `guaName`, `suoShuGong`, `gongWuXing`, `shiYaoWei`, `yingYaoWei`, `yaoList`
+  - **特点**: 只有getter，无setter
+
+**子任务3.1.3：计算属性类**
+
+- [ ] **YaoState.java** - 爻状态（计算属性）
+  - **位置**: `model/dto/YaoState.java`
+  - **属性**: `yao`, `wangShuai`, `xunKong`, `yuePo`, `anDong`, `dongSan`, `riHe`, `yueHe`, `riChong`, `yueChong`, `riSheng`, `yueSheng`, `ruMu`, `linJue`, `jinTuiType`
+  - **特点**: 由`YaoStateCalculator`统一计算
+
+- [ ] **DivinationContext.java** - 起卦上下文（完整版）
   - **位置**: `model/dto/DivinationContext.java`
-- [ ] 创建起卦工厂类 `DivinationFactory.java`
+  - **属性**: `riGan`, `riChen`, `yueJian`, `divinationTime`, `benGua`, `bianGua`, `zhanBuLeiXing`, `wenShi`, `gender`, `yaoStateCache`
+  - **方法**: `getYaoState(int yaoWei)` - 获取爻状态（带缓存）
+
+#### 任务3.2：64卦数据生成器（Linus式：程序生成，非手写）[P0]
+
+**📋 核心思想**：用程序生成64卦数据，而不是手写64条INSERT语句
+
+- [ ] **GongConfig.java** - 宫位配置类
+  - **位置**: `model/dto/GongConfig.java`
+
+- [ ] **NaJiaConfigurator.java** - 纳甲配置器
+  - **位置**: `utils/liuyao/NaJiaConfigurator.java`
+  - **方法**: `getNaJiaSequence(String gongName)` - 返回8宫纳甲序列
+  - **知识库**: knowledge-liuyao02.md (10-178行)
+
+- [ ] **LiuQinGenerator.java** - 六亲生成器
+  - **位置**: `utils/liuyao/LiuQinGenerator.java`
+  - **方法**: `generate(WuXing gongWuXing, DiZhi yaoZhi)` - 根据宫五行和爻地支生成六亲
+  - **知识库**: knowledge-liuyao02.md (10-178行)
+
+- [ ] **ShiYingLocator.java** - 世应定位器
+  - **位置**: `utils/liuyao/ShiYingLocator.java`
+  - **方法**: `getShiYaoWei(String guaLeiXing)`, `getYingYaoWei(int shiYaoWei)`
+  - **知识库**: knowledge-liuyao02.md (229-253行)
+
+- [ ] **GuaXiangDataGenerator.java** - 64卦数据生成器
+  - **位置**: `utils/liuyao/GuaXiangDataGenerator.java`
+  - **方法**: `main()` - 生成64卦数据并输出SQL
+  - **功能**: 
+    - 定义8宫配置
+    - 遍历8宫，每宫生成8卦（本宫、一世~五世、游魂、归魂）
+    - 自动配置六爻地支（纳甲法）
+    - 自动配置六爻六亲
+    - 自动配置世应位置
+    - 验证数据完整性（assert检查）
+    - 生成INSERT SQL语句
+  - **知识库**: knowledge-liuyao01.md (321-986行)
+
+- [ ] **执行生成器**
+  - 运行`GuaXiangDataGenerator.main()`
+  - 生成文件: `src/main/resources/sql/08_insert_64_hexagrams.sql`
+  - 验证数据：64卦、每宫8卦
+  - 执行SQL导入数据库
+
+#### 任务3.3：起卦方法实现 [P0]
+
+**子任务3.3.1：起卦基础架构**
+
+- [ ] **DivinationMethod.java** - 起卦方法接口
+  - **位置**: `service/divination/DivinationMethod.java`
+  - **方法**: `cast(DivinationContext ctx)` - 返回`DivinationResult`
+
+- [ ] **DivinationResult.java** - 起卦结果
+  - **位置**: `model/dto/DivinationResult.java`
+  - **属性**: `benGua`, `bianGua`, `yaoList`, `dongYaoCount`
+
+- [ ] **DivinationFactory.java** - 起卦工厂
   - **位置**: `service/divination/DivinationFactory.java`
-- [ ] 创建测试控制器 `DivinationTestController.java`
+  - **方法**: `getMethod(String type)` - 根据类型返回起卦方法
+
+**子任务3.3.2：手动输入卦象法（优先！）**
+
+- [ ] **ManualInputDivinationMethod.java** - 手动输入卦象法
+  - **位置**: `service/divination/method/ManualInputDivinationMethod.java`
+  - **输入格式**: 
+    ```json
+    {
+      "yaoList": [
+        {"weiZhi": 1, "yinYang": "YANG", "isDong": false},  // 初爻：少阳
+        {"weiZhi": 2, "yinYang": "YIN",  "isDong": false},  // 二爻：少阴
+        {"weiZhi": 3, "yinYang": "YANG", "isDong": true},   // 三爻：老阳（动）
+        {"weiZhi": 4, "yinYang": "YIN",  "isDong": true},   // 四爻：老阴（动）
+        {"weiZhi": 5, "yinYang": "YANG", "isDong": false},  // 五爻：少阳
+        {"weiZhi": 6, "yinYang": "YIN",  "isDong": false}   // 上爻：少阴
+      ]
+    }
+    ```
+  - **逻辑**: 
+    1. 验证输入（必须6个爻，位置1-6，阴阳必填）
+    2. 根据阴阳组合识别本卦（调用GuaXiangIdentifier）
+    3. 根据动爻计算变卦（调用BianGuaCalculator）
+    4. 返回DivinationResult
+  - **使用场景**: 
+    - 用户线下已起卦（摇硬币、蓍草等），仅需系统解卦
+    - 用户从书籍或其他来源获得卦象
+    - 用户想测试特定卦象
+
+**子任务3.3.3：钱币起卦法（自动）**
+
+- [ ] **CoinDivinationMethod.java** - 钱币起卦法
+  - **位置**: `service/divination/method/CoinDivinationMethod.java`
+  - **逻辑**: 
+    - 6次投币（每次3枚硬币）
+    - 3正=老阳（9，变爻），2正1反=少阴（8），2反1正=少阳（7），3反=老阴（6，变爻）
+    - 生成本卦，根据变爻计算变卦
+  - **知识库**: knowledge-liuyao01.md (107-218行)
+
+**子任务3.3.4：变卦计算器（公共工具）**
+
+- [ ] **BianGuaCalculator.java** - 变卦计算器
+  - **位置**: `utils/liuyao/BianGuaCalculator.java`
+  - **方法**: `calculate(GuaXiang benGua, List<Yao> yaoList)` - 根据动爻计算变卦
+  - **知识库**: knowledge-liuyao02.md (256-343行)
+
+#### 任务3.4：卦象识别器 [P0]
+
+- [ ] **GuaXiangIdentifier.java** - 卦象识别器
+  - **位置**: `utils/liuyao/GuaXiangIdentifier.java`
+  - **方法**: `identify(List<YaoType> yaoList)` - 根据6个爻识别卦象
+  - **逻辑**: 将6个爻转换为二进制（阳=1，阴=0），查询数据库匹配卦象
+
+#### 任务3.5：起卦Service和Controller [P0]
+
+- [ ] **DivinationService.java** + **DivinationServiceImpl.java**
+  - **位置**: `service/` + `service/impl/`
+
+- [ ] **DivinationController.java**
+  - **位置**: `controller/divination/DivinationController.java`
+
+- [ ] **DivinationTestController.java**
   - **位置**: `controller/test/DivinationTestController.java`
-- [ ] 测试基础架构
 
-#### 任务3.2：手动起卦实现 [P0]
-- [ ] 创建硬币投掷请求DTO `CoinTossRequest.java`
-  - **位置**: `model/dto/request/CoinTossRequest.java`
-- [ ] 创建硬币投掷响应DTO `CoinTossResponse.java`
-  - **位置**: `model/dto/response/CoinTossResponse.java`
-- [ ] 创建手动起卦方法类 `ManualDivinationMethod.java`
-  - **位置**: `service/divination/method/ManualDivinationMethod.java`
-- [ ] 创建会话管理器 `DivinationSessionManager.java`
-  - **位置**: `utils/DivinationSessionManager.java`
-- [ ] 实现单次投币逻辑（3枚硬币）
-- [ ] 实现六次投币状态管理
-- [ ] 实现爻的生成规则（老阴、少阴、老阳、少阳）
-- [ ] 实现变卦计算逻辑
-- [ ] Redis缓存投币进度
-- [ ] 创建手动起卦Service `ManualDivinationService.java`
-  - **位置**: `service/ManualDivinationService.java`
-- [ ] 实现Service `ManualDivinationServiceImpl.java`
-  - **位置**: `service/impl/ManualDivinationServiceImpl.java`
-- [ ] 创建手动起卦Controller `ManualDivinationController.java`
-  - **位置**: `controller/divination/ManualDivinationController.java`
-- [ ] 创建测试控制器 `ManualDivinationTestController.java`
-  - **位置**: `controller/test/ManualDivinationTestController.java`
-- [ ] 测试手动起卦功能
+### 阶段四：解卦核心功能（第4周）🆕 **2025-10-28更新 - 规则链引擎+30个核心功能**
 
-#### 任务3.3：自动起卦实现 [P0]
-- [ ] 创建时间起卦方法类 `TimeDivinationMethod.java`
-  - **位置**: `service/divination/method/TimeDivinationMethod.java`
-- [ ] 创建数字起卦方法类 `NumberDivinationMethod.java`
-  - **位置**: `service/divination/method/NumberDivinationMethod.java`
-- [ ] 创建随机起卦方法类 `RandomDivinationMethod.java`
-  - **位置**: `service/divination/method/RandomDivinationMethod.java`
-- [ ] 实现时间起卦算法（基于农历天干地支）
-- [ ] 实现数字起卦算法（梅花易数）
-- [ ] 实现随机起卦算法（模拟投币）
-- [ ] 创建自动起卦Service `AutoDivinationService.java`
-  - **位置**: `service/AutoDivinationService.java`
-- [ ] 实现Service `AutoDivinationServiceImpl.java`
-  - **位置**: `service/impl/AutoDivinationServiceImpl.java`
-- [ ] 创建自动起卦Controller `AutoDivinationController.java`
-  - **位置**: `controller/divination/AutoDivinationController.java`
-- [ ] 创建测试控制器 `AutoDivinationTestController.java`
-  - **位置**: `controller/test/AutoDivinationTestController.java`
-- [ ] 测试各种起卦方式
+> **设计理念**：
+> - 规则链引擎，零if嵌套，易扩展
+> - 30个核心功能，知识库100%覆盖
+> - 优先级驱动，P0核心规则优先执行
 
-#### 任务3.4：卦象记录和查询 [P0]
-- [ ] 创建占卜记录保存请求DTO `DivinationSaveRequest.java`
-  - **位置**: `model/dto/request/DivinationSaveRequest.java`
-- [ ] 创建占卜记录查询请求DTO `DivinationQueryRequest.java`
-  - **位置**: `model/dto/request/DivinationQueryRequest.java`
-- [ ] 创建占卜记录响应DTO `DivinationRecordResponse.java`
-  - **位置**: `model/dto/response/DivinationRecordResponse.java`
-- [ ] 更新`DivinationHistory.java`实体类
-  - **位置**: `model/entity/DivinationHistory.java`
-- [ ] 创建占卜记录Service `DivinationRecordService.java`
-  - **位置**: `service/DivinationRecordService.java`
-- [ ] 实现Service `DivinationRecordServiceImpl.java`
-  - **位置**: `service/impl/DivinationRecordServiceImpl.java`
-- [ ] 创建占卜记录Controller `DivinationRecordController.java`
-  - **位置**: `controller/divination/DivinationRecordController.java`
-- [ ] 实现卦象保存功能
-- [ ] 实现问题记录功能
-- [ ] 实现占卜分类功能
-- [ ] 实现卦象查询接口
-- [ ] 实现用户占卜次数限制
-- [ ] Redis缓存占卜次数
-- [ ] 创建测试控制器 `DivinationRecordTestController.java`
-  - **位置**: `controller/test/DivinationRecordTestController.java`
-- [ ] 测试记录功能
+#### 任务4.1：基础工具类（5个核心工具）[P0]
 
-### 阶段四：解卦功能和AI集成（第3周）
+**子任务4.1.1：地支关系工具**
 
-#### 任务4.1：基础解卦功能 [P0]
-- [ ] 创建解释实体类 `Interpretation.java`
-  - **位置**: `model/entity/Interpretation.java`
-- [ ] 创建卦象知识库类 `HexagramData.java`
-  - **位置**: `model/entity/HexagramData.java`
-- [ ] 创建卦象知识仓库 `HexagramRepository.java`
-  - **位置**: `service/knowledge/HexagramRepository.java`
-- [ ] 创建解卦请求DTO `InterpretationRequest.java`
-  - **位置**: `model/dto/request/InterpretationRequest.java`
-- [ ] 创建解卦响应DTO `InterpretationResponse.java`
-  - **位置**: `model/dto/response/InterpretationResponse.java`
-- [ ] 创建解卦Service `InterpretationService.java`
-  - **位置**: `service/InterpretationService.java`
-- [ ] 实现Service `InterpretationServiceImpl.java`
-  - **位置**: `service/impl/InterpretationServiceImpl.java`
-- [ ] 创建解卦Controller `InterpretationController.java`
+- [ ] **DiZhiRelations.java** - 地支关系工具
+  - **位置**: `utils/liuyao/DiZhiRelations.java`
+  - **方法**: `getLiuHe()`, `getLiuChong()`, `getWuXing()`, `isLiuHe()`, `isLiuChong()`
+  - **知识库**: knowledge-liuyao04.md (34-369行), knowledge-liuyao05.md (42-503行)
+
+**子任务4.1.2：旬空查询工具**
+
+- [ ] **XunKongUtil.java** - 旬空工具
+  - **位置**: `utils/liuyao/XunKongUtil.java`
+  - **方法**: `getXunKong()`, `isXunKong()`
+  - **知识库**: knowledge-liuyao07.md (391-737行)
+
+**子任务4.1.3：用神选取器**
+
+- [ ] **YongShenSelector.java** - 用神选取器
+  - **位置**: `utils/liuyao/YongShenSelector.java`
+  - **方法**: `selectYongShen(String zhanBuLeiXing, String gender)` - 返回用神六亲
+  - **知识库**: knowledge-liuyao02.md (346-401行)
+
+**子任务4.1.4：旺衰判断器**
+
+- [ ] **WangShuaiJudge.java** - 旺衰判断器
+  - **位置**: `utils/liuyao/WangShuaiJudge.java`
+  - **方法**: `judge(DiZhi yueJian, WuXing wuXing)` - 返回`WangShuai`枚举
+  - **逻辑**: 四时旺相规则（春木旺、夏火旺、秋金旺、冬水旺）
+  - **知识库**: knowledge-liuyao03.md (100-121行)
+
+**子任务4.1.5：爻状态计算器（核心！）**
+
+- [ ] **YaoStateCalculator.java** - 爻状态计算器
+  - **位置**: `utils/liuyao/YaoStateCalculator.java`
+  - **方法**: `calculate(Yao yao, DivinationContext ctx)` - 返回`YaoState`对象
+  - **计算内容**: 旺衰、旬空、月破、暗动、动散、日月合冲、日月生克、入墓、临绝、进神退神
+
+#### 任务4.2：解卦规则链引擎（Linus式核心）[P0]
+
+**子任务4.2.1：规则接口定义**
+
+- [ ] **JieGuaRule.java** - 解卦规则接口
+  - **位置**: `service/interpretation/rule/JieGuaRule.java`
+  - **方法**: `getName()`, `getPriority()`, `shouldApply()`, `analyze()`, `shouldBreak()`
+
+**子任务4.2.2：核心规则实现（8个P0规则）**
+
+- [ ] **WuGenRule.java** - 用神无根规则（优先级1）
+  - **位置**: `service/interpretation/rule/WuGenRule.java`
+  - **逻辑**: 用神月破+日克+休囚 = 无根，中断后续规则
+  - **知识库**: knowledge-liuyao02.md (609-691行)
+
+- [ ] **XunKongRule.java** - 旬空规则（优先级2）
+  - **位置**: `service/interpretation/rule/XunKongRule.java`
+  - **逻辑**: 判断是否真空（动爻空、旺相空、日冲空、日月生扶空 = 非真空）
+  - **知识库**: knowledge-liuyao07.md (391-737行)
+
+- [ ] **YuePoRule.java** - 月破规则（优先级3）
+  - **位置**: `service/interpretation/rule/YuePoRule.java`
+  - **逻辑**: 野鹤新论 - 月破爻发动仍有用
+  - **知识库**: knowledge-liuyao09.md (月破章)
+
+- [ ] **SanMuRule.java** - 三墓规则（优先级4）
+  - **位置**: `service/interpretation/rule/SanMuRule.java`
+  - **逻辑**: 日墓+动墓+化墓，旺相者入墓非真墓
+  - **知识库**: knowledge-liuyao11.md (全章)
+
+- [ ] **DongJingShengKeRule.java** - 动静生克规则（优先级5）
+  - **位置**: `service/interpretation/rule/DongJingShengKeRule.java`
+  - **逻辑**: 动克静有力，静克动无力
+  - **知识库**: knowledge-liuyao03.md (10-57行)
+
+- [ ] **GuaBianRule.java** - 卦变规则（优先级6）
+  - **位置**: `service/interpretation/rule/GuaBianRule.java`
+  - **逻辑**: 变生、变克、变墓、变绝判断
+  - **知识库**: knowledge-liuyao06.md (32-441行)
+
+- [ ] **SiShenRule.java** - 四神规则（优先级7）
+  - **位置**: `service/interpretation/rule/SiShenRule.java`
+  - **逻辑**: 元神、忌神、仇神分析
+  - **知识库**: knowledge-liuyao02.md (427-526行)
+
+- [ ] **YingQiRule.java** - 应期规则（优先级8）
+  - **位置**: `service/interpretation/rule/YingQiRule.java`
+  - **逻辑**: 12条应期规则
+  - **知识库**: knowledge-liuyao08.md (399-641行)
+
+**子任务4.2.3：解卦引擎**
+
+- [ ] **JieGuaEngine.java** - 解卦引擎
+  - **位置**: `service/interpretation/JieGuaEngine.java`
+  - **方法**: `analyze(DivinationContext ctx)` - 返回`JieGuaResult`
+  - **逻辑**: 1.选取用神 → 2.执行规则链（按优先级） → 3.综合判断
+
+- [ ] **JieGuaResult.java** - 解卦结果
+  - **位置**: `model/dto/JieGuaResult.java`
+  - **属性**: `yongShen`, `judgements`, `finalResult`, `yingQi`, `siShen`
+
+#### 任务4.3：高级功能实现（9个P1规则）[P1]
+
+- [ ] **FeiFuShenFinder.java** - 飞伏神查找器
+  - **知识库**: knowledge-liuyao09.md (飞伏神章)
+
+- [ ] **JinTuiShenDetector.java** - 进神退神检测器
+  - **知识库**: knowledge-liuyao10.md (全章)
+
+- [ ] **KeChuFengShengAnalyzer.java** - 克处逢生分析器
+  - **知识库**: knowledge-liuyao02.md (842-875行)
+
+- [ ] **RiYuePeiHeAnalyzer.java** - 日月配合分析器
+  - **知识库**: knowledge-liuyao03.md (191-219行)
+
+- [ ] **WuQiongZeBianAnalyzer.java** - 物穷则变分析器
+  - **知识库**: knowledge-liuyao03.md (253-279行)
+
+- [ ] **LiuHeApplicationAnalyzer.java** - 六合应用分析器
+  - **知识库**: knowledge-liuyao04.md (34-369行)
+
+- [ ] **LiuChongApplicationAnalyzer.java** - 六冲应用分析器
+  - **知识库**: knowledge-liuyao05.md (42-503行)
+
+- [ ] **SanHeDetector.java** - 三合局检测器
+  - **知识库**: knowledge-liuyao04.md (497-727行)
+
+- [ ] **FanYinFuYinDetector.java** - 反吟伏吟检测器
+  - **知识库**: knowledge-liuyao07.md (39-388行)
+
+#### 任务4.4：解卦Service和Controller [P0]
+
+- [ ] **InterpretationService.java** + **InterpretationServiceImpl.java**
+  - **位置**: `service/` + `service/impl/`
+
+- [ ] **InterpretationController.java**
   - **位置**: `controller/interpretation/InterpretationController.java`
-- [ ] 导入六十四卦基础解释数据
-- [ ] 实现卦象查询功能
-- [ ] 实现卦辞获取功能
-- [ ] 实现爻辞获取功能
-- [ ] 实现变卦解释逻辑
-- [ ] 缓存热门卦象解释
-- [ ] 创建测试控制器 `InterpretationTestController.java`
-  - **位置**: `controller/test/InterpretationTestController.java`
-- [ ] 测试基础解卦
 
-#### 任务4.2：AI模型集成 [P0]
+- [ ] **InterpretationTestController.java**
+  - **位置**: `controller/test/InterpretationTestController.java`
+
+#### 任务4.5：AI模型集成 [P0]
+
 - [ ] 在application.properties配置LangChain4J参数
   - **位置**: `src/main/resources/application.properties`
 - [ ] 创建LangChain4J配置类 `LangChain4jConfig.java`
@@ -759,61 +985,203 @@ public class UserServiceImpl implements UserService {
   - **位置**: `constant/PromptConstants.java`
 - [ ] 测试AI调用
 
-#### 任务4.3：智能解卦实现 [P0]
-- [ ] 创建AI解卦请求DTO `AiInterpretationRequest.java`
-  - **位置**: `model/dto/request/AiInterpretationRequest.java`
-- [ ] 创建AI解卦响应DTO `AiInterpretationResponse.java`
-  - **位置**: `model/dto/response/AiInterpretationResponse.java`
-- [ ] 创建智能解卦Service `AiInterpretationService.java`
-  - **位置**: `service/AiInterpretationService.java`
-- [ ] 实现Service `AiInterpretationServiceImpl.java`
-  - **位置**: `service/impl/AiInterpretationServiceImpl.java`
-- [ ] 创建智能解卦Controller `AiInterpretationController.java`
-  - **位置**: `controller/interpretation/AiInterpretationController.java`
-- [ ] 创建对话记录实体 `ConversationRecord.java`
+#### 任务4.6：AI智能解卦（核心！）[P0]
+
+**📋 设计理念**：
+- **规则链引擎 + AI大模型** = 专业准确 + 通俗易懂
+- 规则链引擎：执行六爻理论分析（用神、旺衰、动静生克等）
+- AI大模型：将分析结果转化为自然语言解释
+
+**子任务4.6.1：AI解卦数据流设计**
+
+```
+用户输入
+  ↓
+起卦（任务3.3）
+  ↓
+规则链引擎分析（任务4.2）
+  ├─ 用神选取
+  ├─ 旺衰判断
+  ├─ 旬空、月破检查
+  ├─ 动静生克分析
+  ├─ 卦变分析
+  └─ 应期推算
+  ↓
+构建AI Prompt
+  ├─ 卦象信息（本卦、变卦、动爻）
+  ├─ 规则分析结果（JSON格式）
+  ├─ 用户问题（占卜类型、具体问题）
+  └─ 六爻知识库（RAG检索相关理论）
+  ↓
+调用AI（LangChain4J + 通义千问）
+  ↓
+流式返回解释
+  ├─ 卦象概述
+  ├─ 用神分析
+  ├─ 吉凶判断
+  ├─ 应期推断
+  └─ 建议指导
+```
+
+**子任务4.6.2：Prompt工程设计**
+
+- [ ] **PromptBuilder.java** - Prompt构建器
+  - **位置**: `utils/ai/PromptBuilder.java`
+  - **方法**: `buildInterpretationPrompt(DivinationContext ctx, JieGuaResult result, String question)`
+  - **Prompt结构**:
+    ```
+    【系统角色】你是一位精通《增删卜易》《野鹤老人占卜全书》的六爻大师
+    
+    【卦象信息】
+    - 本卦：{guaName}（{shangGua}上{xiaGua}下）
+    - 变卦：{bianGuaName}
+    - 动爻：{dongYaoList}
+    - 起卦时间：{divinationTime}
+    - 月建：{yueJian}，日辰：{riChen}
+    
+    【规则分析结果】（由规则链引擎计算）
+    - 用神：{yongShen}（{liuQin}），旺衰：{wangShuai}
+    - 用神状态：{yongShenState}（旬空？月破？日克？）
+    - 元神：{yuanShen}，状态：{yuanShenState}
+    - 忌神：{jiShen}，状态：{jiShenState}
+    - 动爻生克：{dongJingShengKe}
+    - 卦变分析：{guaBian}
+    - 应期推算：{yingQi}
+    
+    【用户问题】
+    - 占卜类型：{zhanBuLeiXing}
+    - 具体问题：{question}
+    
+    【任务】
+    请根据以上卦象和分析结果，用通俗易懂的语言为用户解卦：
+    1. 先概述卦象含义
+    2. 分析用神旺衰及吉凶
+    3. 结合动爻和卦变给出判断
+    4. 推断应期（何时应验）
+    5. 给出实用建议
+    
+    注意：
+    - 严格基于规则分析结果，不要臆测
+    - 语言通俗，避免过多术语
+    - 如果规则分析显示"用神无根"或"凶象明显"，要如实告知
+    ```
+
+**子任务4.6.3：AI解卦Service实现**
+
+- [ ] **AiInterpretationService.java** + **AiInterpretationServiceImpl.java**
+  - **位置**: `service/` + `service/impl/`
+  - **核心方法**:
+    - `interpretWithAi(DivinationContext ctx, JieGuaResult result, String question)` - 同步解卦
+    - `interpretWithAiStream(...)` - 流式解卦（SSE）
+    - `continueConversation(String conversationId, String userMessage)` - 多轮对话
+
+**子任务4.6.4：流式输出实现**
+
+- [ ] **StreamingAiService.java** - 流式AI服务
+  - **位置**: `service/ai/StreamingAiService.java`
+  - **功能**: 
+    - SSE推送（Server-Sent Events）
+    - 客户端断开检测
+    - 超时控制（30秒）
+    - 错误处理和降级
+
+**子任务4.6.5：对话记录管理**
+
+- [ ] **ConversationRecord.java** - 对话记录实体
   - **位置**: `model/entity/ConversationRecord.java`
-- [ ] 创建对话记录Repository `ConversationRecordRepository.java`
+  - **属性**: `conversationId`, `userId`, `divinationId`, `messages`, `createTime`
+
+- [ ] **ConversationRecordRepository.java** - MongoDB Repository
   - **位置**: `mapper/mongo/ConversationRecordRepository.java`
-- [ ] 实现问题分析逻辑
-- [ ] 实现卦象上下文构建
-- [ ] 实现个性化Prompt生成
-- [ ] 实现置信度计算
-- [ ] MongoDB存储对话记录
-- [ ] 创建测试控制器 `AiInterpretationTestController.java`
+  - **功能**: 存储对话历史，支持多轮对话
+
+**子任务4.6.6：AI解卦Controller**
+
+- [ ] **AiInterpretationController.java** - AI解卦控制器
+  - **位置**: `controller/interpretation/AiInterpretationController.java`
+  - **接口**:
+    - `POST /api/interpretation/ai/interpret` - 一次性解卦
+    - `GET /api/interpretation/ai/stream` - 流式解卦（SSE）
+    - `POST /api/interpretation/ai/continue` - 继续对话
+
+**子任务4.6.7：降级方案**
+
+- [ ] **FallbackInterpretationService.java** - 降级解卦服务
+  - **位置**: `service/ai/FallbackInterpretationService.java`
+  - **功能**: AI服务不可用时，返回规则链引擎的结构化分析结果
+  - **场景**: 
+    - AI服务超时
+    - API配额用尽
+    - 网络故障
+
+**子任务4.6.8：RAG卦例检索（核心增强！）[P0]**
+
+- [ ] **VectorStoreConfig.java** - 向量数据库配置
+  - **位置**: `config/VectorStoreConfig.java`
+  - **支持**: Pinecone / Milvus / Chroma（优先Pinecone）
+  - **配置**: API Key、索引名称、维度（1536，OpenAI标准）
+
+- [ ] **CaseVectorizer.java** - 卦例向量化工具
+  - **位置**: `utils/ai/CaseVectorizer.java`
+  - **方法**: 
+    - `embedCase(CaseStudy case)` - 单个卦例向量化
+    - `batchEmbed(List<CaseStudy> cases)` - 批量向量化
+  - **向量化内容**: 卦名 + 占卜类型 + 问题描述 + 结果
+
+- [ ] **CaseRetriever.java** - 卦例检索器
+  - **位置**: `service/ai/CaseRetriever.java`
+  - **方法**:
+    - `retrieveSimilarCases(GuaXiang benGua, GuaXiang bianGua, String category, int topK)` - 相似度检索
+    - `retrieveByKeywords(String keywords, int topK)` - 关键词检索
+  - **检索策略**:
+    - 根据卦象相似度（本卦、变卦）
+    - 根据占卜类型（财运、功名、婚姻等）
+    - 混合检索，加权排序
+  - **返回**: Top 3 最相关卦例
+
+- [ ] **导入经典卦例数据**
+  - **来源**: 《增删卜易》《野鹤老人占卜全书》
+  - **数量**: MVP阶段50个，后续扩充到100+
+  - **分类**: 财运、功名、婚姻、疾病、出行等
+  - **格式**: 
+    ```json
+    {
+      "guaName": "火地晋",
+      "bianGuaName": "火天大有",
+      "category": "财运",
+      "question": "占求财",
+      "result": "月内求财成功，辰日应验",
+      "source": "《增删卜易》",
+      "content": "某日占财运，得火地晋之火天大有..."
+    }
+    ```
+
+- [ ] **集成RAG到Prompt**
+  - 在`PromptBuilder.java`中添加RAG结果注入
+  - Prompt结构增加"【相关卦例】"部分
+  - 示例：
+    ```
+    【相关卦例】（参考）
+    案例1：《增删卜易》- 占财运得火地晋
+      卦象：火地晋之火天大有
+      结果：月内求财成功，辰日应验
+      
+    案例2：《野鹤老人占卜全书》- 占求财
+      卦象：火地晋变爻
+      结果：用神旺相，财运亨通
+    ```
+
+**子任务4.6.9：测试**
+
+- [ ] **AiInterpretationTestController.java** - AI解卦测试控制器
   - **位置**: `controller/test/AiInterpretationTestController.java`
-- [ ] 测试智能解卦
-
-#### 任务4.4：流式输出实现 [P1]
-- [ ] 创建流式解卦Service `StreamInterpretationService.java`
-  - **位置**: `service/StreamInterpretationService.java`
-- [ ] 实现Service `StreamInterpretationServiceImpl.java`
-  - **位置**: `service/impl/StreamInterpretationServiceImpl.java`
-- [ ] 在`AiInterpretationController.java`添加流式接口
-- [ ] 实现SSE推送逻辑
-- [ ] 实现客户端断开处理
-- [ ] 实现超时控制
-- [ ] 测试流式输出
-
-#### 任务4.5：六爻详细分析 [P1]
-- [ ] 创建六爻分析请求DTO `YaoAnalysisRequest.java`
-  - **位置**: `model/dto/request/YaoAnalysisRequest.java`
-- [ ] 创建六爻分析响应DTO `YaoAnalysisResponse.java`
-  - **位置**: `model/dto/response/YaoAnalysisResponse.java`
-- [ ] 创建六爻分析Service `YaoAnalysisService.java`
-  - **位置**: `service/YaoAnalysisService.java`
-- [ ] 实现Service `YaoAnalysisServiceImpl.java`
-  - **位置**: `service/impl/YaoAnalysisServiceImpl.java`
-- [ ] 创建六爻分析Controller `YaoAnalysisController.java`
-  - **位置**: `controller/interpretation/YaoAnalysisController.java`
-- [ ] 实现单爻分析逻辑
-- [ ] 实现六亲关系计算
-- [ ] 实现世应位置判断
-- [ ] 实现动爻影响分析
-- [ ] 实现五行生克关系
-- [ ] 实现爻位吉凶判断
-- [ ] 创建测试控制器 `YaoAnalysisTestController.java`
-  - **位置**: `controller/test/YaoAnalysisTestController.java`
-- [ ] 测试六爻分析
+  - **测试用例**:
+    - 测试不同占卜类型（功名、财运、婚姻等）
+    - 测试不同卦象（吉卦、凶卦、中平）
+    - 测试流式输出
+    - 测试降级方案
+    - **测试RAG检索质量** ← 🆕
+    - **测试卦例相似度匹配** ← 🆕
 
 ### 阶段五：历史记录和知识库（第4周前半）
 
@@ -899,53 +1267,145 @@ public class UserServiceImpl implements UserService {
   - **位置**: `controller/test/KnowledgeTestController.java`
 - [ ] 测试知识库功能
 
-#### 任务5.5：案例管理 [P2]
-- [ ] 创建案例实体类 `CaseStudy.java`
+#### 任务5.5：案例管理（RAG数据源）[P0] 🔥
+
+> **重要性提升**：案例数据是RAG检索的核心数据源，必须优先实现！
+
+**子任务5.5.1：案例数据模型**
+
+- [ ] **CaseStudy.java** - 案例实体类
   - **位置**: `model/entity/CaseStudy.java`
-- [ ] 创建案例Mapper `CaseStudyMapper.java`
+  - **属性**: 
+    - `id`, `guaName`, `bianGuaName`, `shangGua`, `xiaGua`
+    - `category`（占卜类型：财运、功名、婚姻等）
+    - `question`（问题描述）
+    - `result`（结果判断）
+    - `source`（来源：《增删卜易》等）
+    - `content`（完整案例内容）
+    - `dongYaoList`（动爻列表）
+    - `tags`（标签：吉、凶、应期快等）
+    - `embedding`（向量，BLOB类型，可选）
+
+- [ ] **CaseStudyMapper.java** - 案例Mapper
   - **位置**: `mapper/CaseStudyMapper.java`
-- [ ] 创建案例请求DTO `CaseQueryRequest.java`
-  - **位置**: `model/dto/request/CaseQueryRequest.java`
-- [ ] 创建案例响应DTO `CaseResponse.java`
-  - **位置**: `model/dto/response/CaseResponse.java`
-- [ ] 创建案例Service `CaseService.java`
-  - **位置**: `service/CaseService.java`
-- [ ] 实现Service `CaseServiceImpl.java`
-  - **位置**: `service/impl/CaseServiceImpl.java`
-- [ ] 创建案例Controller `CaseController.java`
+  - **方法**: CRUD + 分类查询 + 标签查询
+
+**子任务5.5.2：案例Service和Controller**
+
+- [ ] **CaseService.java** + **CaseServiceImpl.java**
+  - **位置**: `service/` + `service/impl/`
+  - **方法**:
+    - `importCases(List<CaseStudy> cases)` - 批量导入
+    - `queryCasesByCategory(String category)` - 分类查询
+    - `queryCasesByGua(String guaName)` - 卦象查询
+    - `getCaseDetail(Long id)` - 详情查询
+
+- [ ] **CaseController.java** - 案例控制器
   - **位置**: `controller/knowledge/CaseController.java`
-- [ ] 导入经典案例数据
-- [ ] 实现案例列表接口
-- [ ] 实现案例详情接口
-- [ ] 实现案例分类筛选
-- [ ] 实现案例分享功能
-- [ ] 创建测试控制器 `CaseTestController.java`
+  - **接口**:
+    - `GET /api/cases` - 案例列表（分页）
+    - `GET /api/cases/{id}` - 案例详情
+    - `GET /api/cases/category/{category}` - 分类查询
+    - `GET /api/cases/gua/{guaName}` - 按卦象查询
+
+**子任务5.5.3：经典案例数据导入**
+
+- [ ] **准备案例数据**
+  - **来源**: 
+    - 《增删卜易》精选案例（30个）
+    - 《野鹤老人占卜全书》精选案例（20个）
+    - 现代案例整理（可选）
+  - **格式**: Excel/JSON，便于批量导入
+  - **分类覆盖**: 财运、功名、婚姻、疾病、出行、诉讼等
+
+- [ ] **案例向量化**
+  - 调用`CaseVectorizer.batchEmbed()`批量向量化
+  - 存储到向量数据库（Pinecone）
+  - 同时存储到MySQL（原始数据）
+
+- [ ] **验证数据质量**
+  - 检查案例完整性（必填字段）
+  - 检查分类覆盖度
+  - 测试检索效果
+
+**子任务5.5.4：测试**
+
+- [ ] **CaseTestController.java** - 案例测试控制器
   - **位置**: `controller/test/CaseTestController.java`
-- [ ] 测试案例功能
+  - **测试**:
+    - 测试案例导入
+    - 测试分类查询
+    - 测试卦象查询
+    - 测试向量化质量
 
 ### 阶段六：高级功能和优化（第4周后半）
 
-#### 任务6.1：向量化和RAG实现 [P2]
-- [ ] 创建Pinecone配置类 `PineconeConfig.java`
-  - **位置**: `config/PineconeConfig.java`
-- [ ] 创建向量化Service `VectorStoreService.java`
-  - **位置**: `service/VectorStoreService.java`
-- [ ] 实现Service `VectorStoreServiceImpl.java`
-  - **位置**: `service/impl/VectorStoreServiceImpl.java`
-- [ ] 创建RAG Service `RagService.java`
-  - **位置**: `service/RagService.java`
-- [ ] 实现Service `RagServiceImpl.java`
-  - **位置**: `service/impl/RagServiceImpl.java`
-- [ ] 创建RAG Controller `RagController.java`
-  - **位置**: `controller/knowledge/RagController.java`
-- [ ] 配置向量存储
-- [ ] 实现知识库向量化
-- [ ] 实现相似度搜索
-- [ ] 实现RAG增强检索
-- [ ] 优化AI回答质量
-- [ ] 创建测试控制器 `RagTestController.java`
+#### 任务6.1：RAG优化和扩展 [P1]
+
+> **说明**：核心RAG功能已在任务4.6.8实现，本任务专注优化和扩展
+
+**子任务6.1.1：扩充卦例库**
+
+- [ ] **扩充案例数量到500+**
+  - 《增删卜易》深度挖掘（100+个案例）
+  - 《野鹤老人占卜全书》深度挖掘（100+个案例）
+  - 其他经典著作（《卜筮正宗》《易隐》等）
+  - 现代优质案例整理（有验证结果的）
+
+- [ ] **完善案例分类**
+  - 细化占卜类型（15+个类别）
+  - 添加应期标签（快应、慢应、难应）
+  - 添加难度标签（简单、中等、复杂）
+
+**子任务6.1.2：优化检索算法**
+
+- [ ] **混合检索策略**
+  - 语义相似度检索（向量检索）
+  - 关键词检索（全文检索）
+  - 结构化筛选（卦象、类型）
+  - 加权融合排序
+
+- [ ] **ReRanker优化**
+  - 引入ReRanker模型（Cohere/BGE）
+  - 二次排序，提升Top 3精准度
+
+- [ ] **检索参数调优**
+  - 调优相似度阈值
+  - 调优Top K数量
+  - A/B测试不同策略
+
+**子任务6.1.3：知识库向量化**
+
+- [ ] **六爻理论知识向量化**
+  - 提取knowledge-liuyao01~12.md核心理论
+  - 分段向量化（按章节）
+  - 支持理论知识检索
+
+- [ ] **术语解释向量化**
+  - 六爻专业术语库
+  - 支持术语相似查询
+
+**子任务6.1.4：RAG效果评估**
+
+- [ ] **评估指标**
+  - 检索准确率（Precision@3）
+  - 检索召回率（Recall@10）
+  - 用户满意度（人工标注）
+
+- [ ] **持续优化**
+  - 收集用户反馈
+  - 标注优质案例对
+  - 微调检索策略
+
+**子任务6.1.5：测试**
+
+- [ ] **RagTestController.java** - RAG测试控制器
   - **位置**: `controller/test/RagTestController.java`
-- [ ] 测试RAG功能
+  - **测试**:
+    - 测试混合检索
+    - 测试ReRanker效果
+    - 测试不同相似度阈值
+    - 测试知识库检索
 
 #### 任务6.2：性能优化 [P1]
 - [ ] 创建缓存配置类 `CacheConfig.java`
@@ -1259,3 +1719,74 @@ Entity → Mapper → DTO → Service接口 → ServiceImpl → Controller → �
 2. 部署脚本
 3. 监控配置
 4. 测试报告
+
+---
+
+## 📌 更新日志
+
+### 🆕 2025-10-28 重大更新（19:15）- RAG集成到AI解卦
+
+**更新范围**：任务4.6、任务5.5、任务6.1
+
+**核心变更**：
+1. **任务4.6：AI智能解卦增强**
+   - 新增子任务4.6.8：RAG卦例检索 [P0]
+   - 集成向量数据库（Pinecone）
+   - 实现卦例相似度检索
+   - 将检索结果注入Prompt，提升AI解卦质量
+
+2. **任务5.5：案例管理优先级提升**
+   - 优先级：~~[P2]~~ → **[P0]** 🔥
+   - 原因：案例数据是RAG的核心数据源
+   - MVP阶段：导入50个经典案例
+   - 后续扩展：100+ → 500+
+
+3. **任务6.1：RAG实现调整**
+   - 原：向量化和RAG实现（从零开始）
+   - 现：RAG优化和扩展（核心已在4.6实现）
+   - 专注：扩充案例库、优化检索算法、效果评估
+
+**设计理念**：
+- **规则链引擎 + RAG + AI大模型** = 理论准确 + 案例参考 + 通俗易懂
+- RAG提供经典案例参考，让AI解卦更专业、更可信
+
+**数据流**：
+```
+起卦 → 规则链分析 → RAG检索卦例 → 构建Prompt → AI解释
+```
+
+---
+
+### 🆕 2025-10-28 重大更新 - 阶段三、四全面优化
+
+**更新范围**：阶段三（起卦核心功能）+ 阶段四（解卦核心功能）
+
+**核心优化**：
+1. **Linus式架构优化**
+   - 数据结构分离：固有属性（Yao）vs 计算属性（YaoState）
+   - 规则链引擎：零if嵌套，易扩展
+   - 程序生成数据：64卦数据自动生成，避免手写错误
+
+2. **知识库100%覆盖**
+   - 30个核心功能全部实现
+   - 每个功能都有明确的知识库引用（文件名+行号）
+   - 去除6个"野鹤说不用亦可"的功能
+
+3. **任务清单优化**
+   - 阶段三：5个主任务，15+个类
+   - 阶段四：7个主任务，45+个类（含RAG）
+   - 详细拆分到子任务，易于执行
+
+**设计理念**：
+- 基于30个核心功能设计
+- Linus式代码优化（数据结构第一、消除特殊情况、实用主义）
+- 知识库驱动（每个功能明确引用knowledge-liuyao01~12.md）
+
+**详细设计文档**：
+- `.windsurf/specs/liuyao-divination/tasks-phase3-4-updated.md`（完整版）
+- `.windsurf/specs/liuyao-divination/design-knowledge-mapping.md`（设计映射）
+
+**下一步**：
+- 从任务3.1（基础数据结构）开始执行
+- 单任务会话原则，逐个击破
+- 每个子任务完成后立即测试
