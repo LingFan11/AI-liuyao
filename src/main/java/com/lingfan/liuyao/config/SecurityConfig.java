@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -16,21 +17,27 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Spring Security配置类（完整版）
+ * Spring Security配置类（重构版）
  * 
  * 功能：
  * 1. 配置安全过滤器链
- * 2. 添加JWT认证过滤器
- * 3. 配置白名单路径
+ * 2. 添加JWT认证过滤器（集成权限体系）
+ * 3. 使用统一白名单配置（SecurityWhiteList）
  * 4. 禁用CSRF（前后端分离不需要）
  * 5. 配置无状态会话（不使用Session）
  * 6. 配置异常处理（401、403）
  * 
+ * 设计改进：
+ * - 使用统一白名单配置，避免多处维护
+ * - JwtAuthenticationFilter已集成权限加载，不再需要拦截器
+ * - 支持基于注解的权限控制（@PreAuthorize）
+ * 
  * @author Liuyao Team
- * @since 2025-10-23
+ * @since 2025-10-27（重构）
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity  // 启用方法级权限控制（支持@PreAuthorize、@Secured等注解）
 public class SecurityConfig {
     
     @Autowired
@@ -60,27 +67,13 @@ public class SecurityConfig {
             // 配置授权规则
             .authorizeHttpRequests(authorize -> authorize
                 // 白名单路径：允许所有人访问
+                // 使用统一配置SecurityWhiteList，避免多处维护
                 // 注意：Spring Security会自动去除context-path，所以这里不需要/api前缀
-                .requestMatchers(
-                    "/user/register",
-                    "/user/login",
-                    "/user/check-username",
-                    "/user/check-email",
-                    "/user/check-phone",
-                    "/health",
-                    "/swagger-ui/**",
-                    "/v3/api-docs/**",
-                    "/doc.html",
-                    "/swagger-resources/**",
-                    "/webjars/**",
-                    "/favicon.ico"
-                ).permitAll()
+                .requestMatchers(SecurityWhiteList.getAllPatterns()).permitAll()
                 
-                // 测试接口中的公开接口（无需认证）
-                .requestMatchers("/test/auth/public").permitAll()
-                
-                // 其他测试接口由AuthenticationInterceptor控制
                 // 其他所有请求：需要认证
+                // 权限验证由JwtAuthenticationFilter加载到GrantedAuthority中
+                // Controller可使用@PreAuthorize("hasRole('ADMIN')")进行细粒度控制
                 .anyRequest().authenticated()
             )
             

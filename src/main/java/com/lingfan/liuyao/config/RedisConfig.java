@@ -112,6 +112,11 @@ public class RedisConfig {
     /**
      * 创建JSON序列化器
      * 
+     * 安全改进：
+     * 1. 移除 LaissezFaireSubTypeValidator（安全风险：允许反序列化任意类）
+     * 2. 使用 BasicPolymorphicTypeValidator 限制可反序列化的类
+     * 3. 只允许 java.util 和项目包下的类进行多态序列化
+     * 
      * @return Jackson2JsonRedisSerializer
      */
     private Jackson2JsonRedisSerializer<Object> createJsonSerializer() {
@@ -120,9 +125,18 @@ public class RedisConfig {
         // 指定要序列化的域（field、get、set）以及修饰符范围（any包括private和public）
         objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
         
-        // 指定序列化输入的类型，必须是非final类型
+        // 【安全修复】使用白名单验证器，限制可反序列化的类
+        // 只允许：java.util包（List、Map等）和项目包（com.lingfan.liuyao）
+        com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator ptv = 
+            com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator.builder()
+                .allowIfBaseType(java.util.List.class)
+                .allowIfBaseType(java.util.Map.class)
+                .allowIfBaseType(java.util.Set.class)
+                .allowIfSubType("com.lingfan.liuyao")  // 只允许项目包下的类
+                .build();
+        
         objectMapper.activateDefaultTyping(
-            LaissezFaireSubTypeValidator.instance,
+            ptv,
             ObjectMapper.DefaultTyping.NON_FINAL,
             JsonTypeInfo.As.PROPERTY
         );

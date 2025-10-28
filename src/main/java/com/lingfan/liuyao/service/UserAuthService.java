@@ -38,4 +38,21 @@ public interface UserAuthService {
      * @return User实体
      */
     User getUserByAccount(String account);
+    
+    /**
+     * 刷新Token
+     * 
+     * 功能说明：
+     * - 验证旧Token的有效性
+     * - 生成新的Token（延长有效期）
+     * - 将旧Token加入黑名单（防止重复使用）
+     * 
+     * 注意：
+     * - 旧Token必须有效（未过期、未在黑名单）
+     * - 如果Token已失效，抛出异常，需要重新登录
+     * 
+     * @param oldToken 当前Token
+     * @return 新的Token
+     */
+    String refreshToken(String oldToken);
 }

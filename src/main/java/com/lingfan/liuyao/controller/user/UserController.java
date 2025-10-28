@@ -232,6 +232,53 @@ public class UserController {
     }
     
     /**
+     * 刷新Token
+     * 
+     * 接口：POST /api/user/refresh-token
+     * Header: Authorization: Bearer {当前Token}
+     * 
+     * 设计说明：
+     * - 替代自动续期：用户主动刷新Token，不再通过响应头自动返回
+     * - 前端控制：前端检测Token即将过期时主动调用此接口
+     * - 简单清晰：前端状态管理更简单，不会出现多个Token的混乱
+     * 
+     * 响应示例：
+     * {
+     *   "code": 200,
+     *   "message": "操作成功",
+     *   "data": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+     * }
+     * 
+     * 注意：
+     * - 需要携带有效的Token（即使即将过期）
+     * - 如果Token已失效，需要重新登录
+     * 
+     * @param httpRequest HttpServletRequest（从Header获取当前Token）
+     * @return 新的Token
+     */
+    @PostMapping("/refresh-token")
+    @Operation(summary = "刷新Token", description = "主动刷新JWT Token，获取新的有效期")
+    public ApiResponse<String> refreshToken(HttpServletRequest httpRequest) {
+        
+        log.info("接收Token刷新请求");
+        
+        // 从Header获取当前Token
+        String authHeader = httpRequest.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.warn("Token刷新失败：缺少Authorization Header");
+            return ApiResponse.error(ErrorCode.UNAUTHORIZED, "缺少Token");
+        }
+        
+        String oldToken = authHeader.substring(7);
+        
+        // 调用Service刷新Token
+        String newToken = userAuthService.refreshToken(oldToken);
+        
+        log.info("Token刷新成功");
+        return ApiResponse.success(newToken);
+    }
+    
+    /**
      * 获取真实IP地址
      * 支持Nginx等反向代理
      * 
@@ -351,7 +398,6 @@ public class UserController {
      *   }
      * }
      * 
-     * @param request HttpServletRequest（从Header获取Token）
      * @return 用户详细信息（脱敏处理）
      */
     @GetMapping("/profile")
@@ -392,7 +438,6 @@ public class UserController {
      * }
      * 
      * @param updateRequest 更新请求
-     * @param request HttpServletRequest
      * @return 更新后的用户信息
      */
     @PutMapping("/profile")
@@ -429,7 +474,6 @@ public class UserController {
      * }
      * 
      * @param file 头像文件
-     * @param request HttpServletRequest
      * @return 头像URL
      */
     @PostMapping("/avatar")

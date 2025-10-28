@@ -1,7 +1,10 @@
 package com.lingfan.liuyao.interceptor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lingfan.liuyao.config.SecurityWhiteList;
+import com.lingfan.liuyao.constant.CacheConstants;
 import com.lingfan.liuyao.enums.ErrorCode;
+import com.lingfan.liuyao.mapper.UserMapper;
 import com.lingfan.liuyao.utils.ApiResponse;
 import com.lingfan.liuyao.utils.JwtUtil;
 import jakarta.servlet.FilterChain;
@@ -13,6 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
@@ -21,28 +26,33 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
- * JWT认证过滤器
+ * JWT认证过滤器（完全集成Spring Security权限体系）
  * 
  * 功能：
- * 1. 拦截所有HTTP请求
- * 2. 从请求头提取JWT Token
- * 3. 验证Token有效性
- * 4. 检查Token黑名单（Redis）
- * 5. 提取用户信息并存入SecurityContext
+ * 1. 拦截所有HTTP请求，检查白名单
+ * 2. 从请求头提取JWT Token并验证
+ * 3. 检查Token黑名单（Redis）
+ * 4. 提取用户信息、角色、权限
+ * 5. 构建Spring Security的Authentication对象（包含GrantedAuthority）
  * 6. 更新用户在线状态（Redis）
- * 7. Token自动续期（可选）
+ * 
+ * 设计改进：
+ * - 删除双重认证：不再需要AuthenticationInterceptor
+ * - 权限直接加载到Spring Security的GrantedAuthority中
+ * - 删除Token自动续期：改为主动刷新接口
+ * - 使用统一白名单配置：SecurityWhiteList
  * 
  * 执行顺序：
  * Spring Security过滤器链中，在UsernamePasswordAuthenticationFilter之前执行
  * 
  * @author Liuyao Team
- * @since 2025-10-23
+ * @since 2025-10-27（重构）
  */
 @Component
 @Slf4j
@@ -54,17 +64,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
     
+    @Autowired
+    private UserMapper userMapper;
+    
     @Value("${liuyao.jwt.header}")
     private String tokenHeader;  // "Authorization"
     
     @Value("${liuyao.jwt.prefix}")
     private String tokenPrefix;  // "Bearer "
     
-    /**
-     * Redis Key前缀
-     */
-    private static final String TOKEN_BLACKLIST_PREFIX = "token:blacklist:";
-    private static final String USER_ONLINE_PREFIX = "user:online:";
+    @Value("${server.servlet.context-path:/api}")
+    private String contextPath;  // "/api"
+    
+    // Redis Key前缀已统一到 CacheConstants 中
     
     /**
      * 在线状态过期时间（分钟）
@@ -72,40 +84,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final int ONLINE_STATUS_EXPIRE_MINUTES = 30;
     
     /**
-     * Token自动续期阈值（分钟）
-     * Token剩余时间少于此值时自动续期
+     * 角色前缀（Spring Security约定）
      */
-    private static final int TOKEN_REFRESH_THRESHOLD_MINUTES = 30;
+    private static final String ROLE_PREFIX = "ROLE_";
     
     /**
-     * 白名单路径（不需要认证）
+     * 权限前缀（自定义约定）
      */
-    private static final List<String> WHITE_LIST = Arrays.asList(
-        "/api/user/register",                   // 注册
-        "/api/user/login",                      // 登录
-        "/api/user/check-username",             // 检查用户名
-        "/api/user/check-email",                // 检查邮箱
-        "/api/user/check-phone",                // 检查手机号
-        "/api/health",                          // 健康检查
-        "/api/test/register/**",                // 注册测试接口（开发阶段）
-        "/api/test/login/**",                   // 登录测试接口（开发阶段）
-        "/api/test/profile/**",                 // 用户信息管理测试接口（开发阶段）
-        "/api/test/util/**",                    // 工具类测试接口（开发阶段）
-        "/api/test/auth/public",                // 公开测试接口（无需认证）
-        "/api/test/config/generate-token",      // 生成测试Token
-        "/api/test/config/redis",               // Redis测试
-        "/api/test/config/mongodb",             // MongoDB测试
-        "/api/test/config/async",               // 线程池测试
-        "/api/test/config/cors",                // 跨域测试
-        "/api/test/config/logout-test",         // 登出测试
-        // 注意：/api/test/config/jwt 和 /api/test/auth/** 不在白名单中，需要JWT认证
-        "/swagger-ui/**",                       // Swagger UI
-        "/v3/api-docs/**",                      // API文档
-        "/doc.html",                            // Knife4j文档
-        "/swagger-resources/**",                // Swagger资源
-        "/webjars/**",                          // Web资源
-        "/favicon.ico"                          // 图标
-    );
+    private static final String PERMISSION_PREFIX = "PERM_";
     
     /**
      * 路径匹配器
@@ -125,7 +111,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String requestUri = request.getRequestURI();
         log.debug("JWT过滤器拦截请求：{}", requestUri);
         
-        // 1. 检查是否在白名单中，doFilter 通过过滤
+        // 1. 检查是否在白名单中
         if (isWhiteList(requestUri)) {
             log.debug("白名单路径，跳过认证：{}", requestUri);
             filterChain.doFilter(request, response);
@@ -141,7 +127,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         
         try {
-            // 3. 检查Token是否在黑名单（已登出）
+            // 3. 检查Token是否在黑名单（已登出或已刷新）
             if (isTokenBlacklisted(token)) {
                 log.warn("Token已失效（在黑名单中）：{}", token);
                 handleAuthenticationFailure(response, "Token已失效，请重新登录", ErrorCode.TOKEN_INVALID.getCode());
@@ -160,19 +146,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String username = jwtUtil.getUsernameFromToken(token);
             log.debug("Token验证成功，用户ID：{}，用户名：{}", userId, username);
             
-            // 6. 更新用户在线状态（Redis）
+            // 6. 查询用户的角色和权限（从数据库）
+            List<GrantedAuthority> authorities = loadUserAuthorities(userId);
+            log.debug("加载用户权限：userId={}, authorities={}", userId, authorities.size());
+            
+            // 7. 更新用户在线状态（Redis）
             updateUserOnlineStatus(userId);
             
-            // 7. Token自动续期（可选）
-            refreshTokenIfNeeded(token, response);
-            
-            // 8. 构建Authentication对象，存入SecurityContext
-            // 注意：principal存的是userId（Long类型），Controller中可通过SecurityContext获取
+            // 8. 构建Authentication对象并存入SecurityContext
+            // principal存userId，authorities存角色和权限
+            // Spring Security会自动根据authorities进行权限校验
             UsernamePasswordAuthenticationToken authentication =
-                new UsernamePasswordAuthenticationToken(userId, null, new ArrayList<>());
+                new UsernamePasswordAuthenticationToken(userId, null, authorities);
             SecurityContextHolder.getContext().setAuthentication(authentication);
             
-            log.debug("用户认证成功，已存入SecurityContext：userId={}", userId);
+            log.debug("用户认证成功，已存入SecurityContext：userId={}, authorities={}", userId, authorities.size());
             
             // 9. 继续执行过滤器链
             filterChain.doFilter(request, response);
@@ -187,18 +175,57 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
     
     /**
-     * 检查请求路径是否在白名单中
+     * 检查请求路径是否在白名单中（使用统一配置）
      * 
      * @param requestUri 请求路径
      * @return true=在白名单, false=不在白名单
      */
     private boolean isWhiteList(String requestUri) {
-        for (String pattern : WHITE_LIST) {
+        String[] whiteList = SecurityWhiteList.getAllPatternsWithContext(contextPath);
+        for (String pattern : whiteList) {
             if (pathMatcher.match(pattern, requestUri)) {
                 return true;
             }
         }
         return false;
+    }
+    
+    /**
+     * 加载用户的角色和权限（转换为Spring Security的GrantedAuthority）
+     * 
+     * @param userId 用户ID
+     * @return GrantedAuthority列表
+     */
+    private List<GrantedAuthority> loadUserAuthorities(Long userId) {
+        try {
+            // 1. 查询用户角色（如：admin, user）
+            List<String> roles = userMapper.selectUserRoles(userId);
+            
+            // 2. 查询用户权限（如：user:create, user:delete）
+            List<String> permissions = userMapper.selectUserPermissions(userId);
+            
+            // 3. 转换为GrantedAuthority
+            // 角色：添加ROLE_前缀（Spring Security约定）
+            List<GrantedAuthority> authorities = roles.stream()
+                .map(role -> new SimpleGrantedAuthority(ROLE_PREFIX + role.toUpperCase()))
+                .collect(Collectors.toList());
+            
+            // 权限：添加PERM_前缀（自定义约定，便于区分）
+            List<GrantedAuthority> permissionAuthorities = permissions.stream()
+                .map(perm -> new SimpleGrantedAuthority(PERMISSION_PREFIX + perm))
+                .collect(Collectors.toList());
+            
+            authorities.addAll(permissionAuthorities);
+            
+            log.debug("用户权限加载完成：userId={}, roles={}, permissions={}, totalAuthorities={}",
+                userId, roles.size(), permissions.size(), authorities.size());
+            
+            return authorities;
+            
+        } catch (Exception e) {
+            log.error("加载用户权限失败：userId={}", userId, e);
+            return new ArrayList<>();
+        }
     }
     
     /**
@@ -220,13 +247,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     /**
      * 检查Token是否在黑名单
      * 
-     * 场景：用户登出、修改密码、管理员强制下线
+     * 场景：
+     * 1. 用户登出
+     * 2. Token已刷新（旧Token加入黑名单）
+     * 3. 修改密码
+     * 4. 管理员强制下线
      * 
      * @param token JWT Token
      * @return true=在黑名单, false=不在黑名单
      */
     private boolean isTokenBlacklisted(String token) {
-        String key = TOKEN_BLACKLIST_PREFIX + token;
+        String key = CacheConstants.JWT_BLACKLIST_PREFIX + token;
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));
     }
     
@@ -240,46 +271,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      */
     private void updateUserOnlineStatus(Long userId) {
         try {
-            String key = USER_ONLINE_PREFIX + userId;
+            String key = CacheConstants.USER_ONLINE_PREFIX + userId;
             redisTemplate.opsForValue().set(
                 key,
                 System.currentTimeMillis(),
-                ONLINE_STATUS_EXPIRE_MINUTES,
-                TimeUnit.MINUTES
+                CacheConstants.USER_ONLINE_TTL,
+                TimeUnit.SECONDS
             );
-            log.debug("更新用户在线状态：userId={}, expireMinutes={}", userId, ONLINE_STATUS_EXPIRE_MINUTES);
+            log.debug("更新用户在线状态：userId={}, expireTTL={}秒", userId, CacheConstants.USER_ONLINE_TTL);
         } catch (Exception e) {
             log.error("更新用户在线状态失败：userId={}", userId, e);
             // 不影响主流程，继续执行
         }
     }
     
-    /**
-     * Token自动续期
-     * 
-     * 如果Token剩余时间少于30分钟，自动刷新Token
-     * 新Token通过响应头"New-Token"返回给前端
-     * 
-     * @param token 当前Token
-     * @param response HttpServletResponse
-     */
-    private void refreshTokenIfNeeded(String token, HttpServletResponse response) {
-        try {
-            Date expiration = jwtUtil.getExpirationFromToken(token);
-            long remainingTime = expiration.getTime() - System.currentTimeMillis();
-            long thresholdTime = TOKEN_REFRESH_THRESHOLD_MINUTES * 60 * 1000;
-            
-            // 剩余时间少于阈值，自动刷新
-            if (remainingTime > 0 && remainingTime < thresholdTime) {
-                String newToken = jwtUtil.refreshToken(token);
-                response.setHeader("New-Token", newToken);
-                log.info("Token即将过期，已自动续期。剩余时间：{}分钟", remainingTime / 60000);
-            }
-        } catch (Exception e) {
-            log.error("Token自动续期失败", e);
-            // 不影响主流程，继续执行
-        }
-    }
     
     /**
      * 处理认证失败，返回401响应

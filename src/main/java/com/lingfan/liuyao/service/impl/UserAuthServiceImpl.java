@@ -178,7 +178,7 @@ public class UserAuthServiceImpl implements UserAuthService {
             // 达到5次，锁定账号30分钟
             if (failedCount >= CacheConstants.MAX_LOGIN_FAILED_COUNT) {
                 String lockKey = CacheConstants.ACCOUNT_LOCK_PREFIX + account;
-                redisUtil.set(lockKey, true, CacheConstants.ACCOUNT_LOCK_TTL);
+                redisUtil.set(lockKey, "1", CacheConstants.ACCOUNT_LOCK_TTL);  // 使用字符串"1"作为锁定标记
                 
                 log.warn("账号登录失败{}次，已锁定30分钟：account={}, userId={}", 
                     failedCount, account, userId);
@@ -242,6 +242,64 @@ public class UserAuthServiceImpl implements UserAuthService {
             log.debug("缓存用户会话：userId={}", userId);
         } catch (Exception e) {
             log.error("缓存用户会话失败：userId={}", userId, e);
+        }
+    }
+    
+    /**
+     * 刷新Token
+     */
+    @Override
+    public String refreshToken(String oldToken) {
+        log.info("开始刷新Token");
+        
+        try {
+            // Step 1: 验证旧Token的有效性
+            if (!jwtUtil.validateToken(oldToken)) {
+                log.warn("Token无效，无法刷新");
+                throw new BusinessException(ErrorCode.TOKEN_INVALID, "Token已失效，请重新登录");
+            }
+            
+            // Step 2: 检查Token是否在黑名单中
+            String blacklistKey = CacheConstants.JWT_BLACKLIST_PREFIX + oldToken;
+            if (redisUtil.hasKey(blacklistKey)) {
+                log.warn("Token已在黑名单中，无法刷新");
+                throw new BusinessException(ErrorCode.TOKEN_INVALID, "Token已失效，请重新登录");
+            }
+            
+            // Step 3: 从旧Token提取用户信息
+            Long userId = jwtUtil.getUserIdFromToken(oldToken);
+            String username = jwtUtil.getUsernameFromToken(oldToken);
+            log.debug("提取Token信息：userId={}, username={}", userId, username);
+            
+            // Step 4: 生成新Token
+            String newToken = jwtUtil.generateToken(userId, username);
+            log.info("生成新Token成功：userId={}", userId);
+            
+            // Step 5: 将旧Token加入黑名单（防止重复使用）
+            // 黑名单的过期时间 = 旧Token的剩余有效期
+            long remainingTime = jwtUtil.getExpirationFromToken(oldToken).getTime() - System.currentTimeMillis();
+            if (remainingTime > 0) {
+                long remainingSeconds = remainingTime / 1000;
+                redisUtil.set(blacklistKey, "1", remainingSeconds);  // 使用字符串"1"作为标记
+                log.debug("旧Token已加入黑名单：剩余有效期={}秒", remainingSeconds);
+            }
+            
+            // Step 6: 更新用户会话缓存
+            String sessionKey = CacheConstants.USER_SESSION_PREFIX + userId;
+            Map<String, Object> session = new HashMap<>();
+            session.put("userId", userId);
+            session.put("token", newToken);
+            session.put("refreshTime", LocalDateTime.now());
+            redisUtil.set(sessionKey, session, CacheConstants.USER_SESSION_TTL);
+            
+            log.info("Token刷新成功：userId={}", userId);
+            return newToken;
+            
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Token刷新失败", e);
+            throw new BusinessException(ErrorCode.TOKEN_INVALID, "Token刷新失败：" + e.getMessage());
         }
     }
     
