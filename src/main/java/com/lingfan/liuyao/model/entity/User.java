@@ -105,6 +105,11 @@ public class User implements Serializable {
      */
     private LocalDate lastDivinationDate;
     
+    /**
+     * 最后占卜时间（精确到秒）
+     */
+    private LocalDateTime lastDivinationTime;
+    
     // ==================== 账号状态 ====================
     
     /**

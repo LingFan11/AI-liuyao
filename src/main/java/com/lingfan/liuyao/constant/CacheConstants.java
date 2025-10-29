@@ -161,7 +161,7 @@ public class CacheConstants {
      */
     public static final String JWT_BLACKLIST_PREFIX = "jwt:blacklist:";
     
-    // ==================== 占卜模块缓存（预留） ====================
+    // ==================== 占卜模块缓存 ====================
     
     /**
      * 卦象信息缓存前缀
@@ -176,7 +176,20 @@ public class CacheConstants {
     public static final long HEXAGRAM_TTL = 86400;
     
     /**
-     * 占卜次数限制缓存前缀
+     * 占卜次数缓存前缀（每日计数）
+     * 完整Key: divination:times:{userId}:{date}
+     * 示例: divination:times:1001:2025-10-29
+     */
+    public static final String DIVINATION_TIMES_PREFIX = "divination:times:";
+    
+    /**
+     * 占卜次数缓存过期时间（秒）
+     * 24小时（通过动态计算到当天结束的时间）
+     */
+    public static final long DIVINATION_TIMES_TTL = 86400;
+    
+    /**
+     * 占卜次数限制缓存前缀（预留）
      * 完整Key: divination:limit:{userId}:{date}
      */
     public static final String DIVINATION_LIMIT_PREFIX = "divination:limit:";
