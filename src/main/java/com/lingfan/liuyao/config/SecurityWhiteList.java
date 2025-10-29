@@ -65,7 +65,8 @@ public class SecurityWhiteList {
         "/test/config/mongodb",     // MongoDB测试
         "/test/config/async",       // 线程池测试
         "/test/config/cors",        // 跨域测试
-        "/test/config/logout-test"  // 登出测试
+        "/test/config/logout-test", // 登出测试
+        "/test/divination/**"       // 起卦测试
     };
     
     /**

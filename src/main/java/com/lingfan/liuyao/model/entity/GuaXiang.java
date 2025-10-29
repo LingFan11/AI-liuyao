@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 /**
  * 卦象实体（不可变对象）
  * <p>
- * 存储卦象的固有属性，对应数据库hexagrams表
+ * 存储卦象的固有属性，对应数据库gua_xiang_base表
  * 64卦数据由程序生成，而不是手写SQL
  * </p>
  * 
@@ -30,64 +30,64 @@ import java.util.stream.Collectors;
  * @author LingFan
  * @since 2025-10-28
  */
-@TableName("hexagrams")
-public final class GuaXiang {
+@TableName("gua_xiang_base")
+public class GuaXiang {
     
-    // ========== 数据库字段（final，不可变）==========
+    // ========== 数据库字段 ==========
     
     /**
      * 卦象ID（1-64）
      */
     @TableId(value = "id", type = IdType.AUTO)
-    private final Long id;
+    private Long id;
     
     /**
      * 卦名（如"乾为天"）
      */
     @TableField("gua_name")
-    private final String guaName;
+    private String guaName;
     
     /**
      * 所属宫（如"乾宫"）
      */
     @TableField("suo_shu_gong")
-    private final String suoShuGong;
+    private String suoShuGong;
     
     /**
      * 宫五行名称
      */
     @TableField("gong_wu_xing")
-    private final String gongWuXingName;
+    private String gongWuXingName;
     
     /**
      * 世爻位（1-6）
      */
     @TableField("shi_yao_wei")
-    private final Integer shiYaoWei;
+    private Integer shiYaoWei;
     
     /**
      * 应爻位（1-6）
      */
     @TableField("ying_yao_wei")
-    private final Integer yingYaoWei;
+    private Integer yingYaoWei;
     
     /**
      * 上卦名称
      */
     @TableField("shang_gua")
-    private final String shangGuaName;
+    private String shangGuaName;
     
     /**
      * 下卦名称
      */
     @TableField("xia_gua")
-    private final String xiaGuaName;
+    private String xiaGuaName;
     
     /**
      * 卦类型（本宫、一世、二世...游魂、归魂）
      */
     @TableField("gua_lei_xing")
-    private final String guaLeiXing;
+    private String guaLeiXing;
     
     // ========== 业务字段（非数据库字段）==========
     
@@ -95,25 +95,25 @@ public final class GuaXiang {
      * 宫五行（业务枚举）
      */
     @TableField(exist = false)
-    private final WuXing gongWuXing;
+    private WuXing gongWuXing;
     
     /**
      * 上卦（业务枚举）
      */
     @TableField(exist = false)
-    private final BaGua shangGua;
+    private BaGua shangGua;
     
     /**
      * 下卦（业务枚举）
      */
     @TableField(exist = false)
-    private final BaGua xiaGua;
+    private BaGua xiaGua;
     
     /**
      * 六爻列表（不可变List）
      */
     @TableField(exist = false)
-    private final List<Yao> yaoList;
+    private List<Yao> yaoList;
 
     // ========== 构造函数（私有，使用Builder模式）==========
     
@@ -146,7 +146,7 @@ public final class GuaXiang {
      * MyBatis-Plus需要的无参构造函数
      */
     public GuaXiang() {
-        this(null, null, null, null, null, null, null, null, null, null, null, null, null);
+        // 空构造函数，字段通过setter设置
     }
 
     // ========== Getter方法（只读）==========
@@ -204,6 +204,63 @@ public final class GuaXiang {
      */
     public List<Yao> getYaoList() {
         return yaoList;
+    }
+
+    // ========== Setter方法（MyBatis-Plus需要）==========
+    
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public void setGuaName(String guaName) {
+        this.guaName = guaName;
+    }
+
+    public void setSuoShuGong(String suoShuGong) {
+        this.suoShuGong = suoShuGong;
+    }
+
+    public void setGongWuXingName(String gongWuXingName) {
+        this.gongWuXingName = gongWuXingName;
+    }
+
+    public void setShiYaoWei(Integer shiYaoWei) {
+        this.shiYaoWei = shiYaoWei;
+    }
+
+    public void setYingYaoWei(Integer yingYaoWei) {
+        this.yingYaoWei = yingYaoWei;
+    }
+
+    public void setShangGuaName(String shangGuaName) {
+        this.shangGuaName = shangGuaName;
+    }
+
+    public void setXiaGuaName(String xiaGuaName) {
+        this.xiaGuaName = xiaGuaName;
+    }
+
+    public void setGuaLeiXing(String guaLeiXing) {
+        this.guaLeiXing = guaLeiXing;
+    }
+    
+    public void setGongWuXing(WuXing gongWuXing) {
+        this.gongWuXing = gongWuXing;
+    }
+    
+    public void setShangGua(BaGua shangGua) {
+        this.shangGua = shangGua;
+    }
+    
+    public void setXiaGua(BaGua xiaGua) {
+        this.xiaGua = xiaGua;
+    }
+    
+    public void setYaoList(List<Yao> yaoList) {
+        // 包装为不可变List
+        this.yaoList = yaoList == null ? 
+                Collections.emptyList() : 
+                Collections.unmodifiableList(new ArrayList<>(yaoList));
     }
 
     // ========== 辅助方法 ==========

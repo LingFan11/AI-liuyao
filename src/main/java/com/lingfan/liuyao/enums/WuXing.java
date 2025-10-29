@@ -1,5 +1,7 @@
 package com.lingfan.liuyao.enums;
 
+import com.baomidou.mybatisplus.annotation.EnumValue;
+
 /**
  * 五行枚举
  * <p>
@@ -42,8 +44,9 @@ public enum WuXing {
     TU("土", "寅", "午", "戌", "申");
 
     /**
-     * 五行名称
+     * 五行名称（数据库映射字段）
      */
+    @EnumValue
     private final String name;
     
     /**

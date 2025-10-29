@@ -96,9 +96,11 @@ public class GuaXiangDataGenerator {
             
             // 4. 生成SQL文件
             System.out.println("Step 4: 生成INSERT SQL文件...");
-            String filePath = "src/main/resources/sql/09_insert_64_hexagrams.sql";
-            generateSQL(allGua, filePath);
-            System.out.println("✅ SQL文件已生成: " + filePath + "\n");
+            String filePath = "src/main/resources/sql/08_insert_64_hexagrams_generated.sql";
+            String absolutePath = generateSQL(allGua, filePath);
+            System.out.println("✅ SQL文件已生成");
+            System.out.println("   相对路径: " + filePath);
+            System.out.println("   绝对路径: " + absolutePath + "\n");
             
             System.out.println("========================================");
             System.out.println("   ✅ 64卦数据生成完成！");
@@ -134,15 +136,15 @@ public class GuaXiangDataGenerator {
             new boolean[]{false, true, false, false, true, false}
         ));
         
-        // 艮宫（土）：艮☶ = 100100（阳阴阴，重复）
+        // 艮宫（土）：艮☶ = 001001（阴阴阳，重复）
         list.add(new GongConfig(
             "艮宫",
             WuXing.TU,
             NaJiaConfigurator.getNaJiaSequence("艮宫"),
-            new boolean[]{false, false, true, true, false, true}
+            new boolean[]{false, false, true, false, false, true}
         ));
         
-        // 震宫（木）：震☳ = 001001（阴阴阳，重复）
+        // 震宫（木）：震☳ = 100100（阳阴阴，重复）
         list.add(new GongConfig(
             "震宫",
             WuXing.MU,
@@ -150,7 +152,7 @@ public class GuaXiangDataGenerator {
             new boolean[]{true, false, false, true, false, false}
         ));
         
-        // 巽宫（木）：巽☴ = 110110（阳阳阴，重复）
+        // 巽宫（木）：巽☴ = 011011（阴阳阳，重复）
         list.add(new GongConfig(
             "巽宫",
             WuXing.MU,
@@ -174,12 +176,12 @@ public class GuaXiangDataGenerator {
             new boolean[]{false, false, false, false, false, false}
         ));
         
-        // 兑宫（金）：兑☱ = 011011（阴阳阳，重复）
+        // 兑宫（金）：兑☱ = 110110（阳阳阴，重复）
         list.add(new GongConfig(
             "兑宫",
             WuXing.JIN,
             NaJiaConfigurator.getNaJiaSequence("兑宫"),
-            new boolean[]{false, true, true, false, true, true}
+            new boolean[]{true, true, false, true, true, false}
         ));
         
         return list;
@@ -336,14 +338,14 @@ public class GuaXiangDataGenerator {
      * @return 八卦名称
      */
     private static String getBaGuaName(boolean yao1, boolean yao2, boolean yao3) {
-        if (yao1 && yao2 && yao3) return "乾";  // 111
-        if (!yao1 && !yao2 && !yao3) return "坤";  // 000
-        if (!yao1 && !yao2 && yao3) return "震";  // 001
-        if (yao1 && !yao2 && !yao3) return "艮";  // 100
-        if (!yao1 && yao2 && !yao3) return "坎";  // 010
-        if (yao1 && !yao2 && yao3) return "离";  // 101
-        if (yao1 && yao2 && !yao3) return "巽";  // 110
-        if (!yao1 && yao2 && yao3) return "兑";  // 011
+        if (yao1 && yao2 && yao3) return "乾";  // 111 (乾三连)
+        if (!yao1 && !yao2 && !yao3) return "坤";  // 000 (坤六断)
+        if (yao1 && !yao2 && !yao3) return "震";  // 100 (震仰盂)
+        if (!yao1 && !yao2 && yao3) return "艮";  // 001 (艮覆碗)
+        if (!yao1 && yao2 && !yao3) return "坎";  // 010 (坎中满)
+        if (yao1 && !yao2 && yao3) return "离";  // 101 (离中虚)
+        if (!yao1 && yao2 && yao3) return "巽";  // 011 (巽下断)
+        if (yao1 && yao2 && !yao3) return "兑";  // 110 (兑上缺)
         
         return "未知";
     }
@@ -391,12 +393,17 @@ public class GuaXiangDataGenerator {
     
     /**
      * 生成INSERT SQL文件
+     * 
+     * @return 生成文件的绝对路径
      */
-    private static void generateSQL(List<GuaData> guaList, String filePath) throws IOException {
-        // 确保目录存在
-        Files.createDirectories(Paths.get(filePath).getParent());
+    private static String generateSQL(List<GuaData> guaList, String filePath) throws IOException {
+        // 获取绝对路径
+        java.nio.file.Path path = Paths.get(filePath).toAbsolutePath();
         
-        try (FileWriter writer = new FileWriter(filePath)) {
+        // 确保目录存在
+        Files.createDirectories(path.getParent());
+        
+        try (FileWriter writer = new FileWriter(path.toFile())) {
             // 写入文件头
             writer.write("-- ========================================\n");
             writer.write("-- 64卦数据插入脚本（程序自动生成）\n");
@@ -421,6 +428,8 @@ public class GuaXiangDataGenerator {
             
             writer.write("\n-- ✅ 64卦数据插入完成\n");
         }
+        
+        return path.toString();
     }
     
     // ========== 内部数据类 ==========

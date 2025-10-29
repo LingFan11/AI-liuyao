@@ -1,5 +1,7 @@
 package com.lingfan.liuyao.enums;
 
+import com.baomidou.mybatisplus.annotation.EnumValue;
+
 /**
  * 八卦枚举
  * <p>
@@ -56,8 +58,9 @@ public enum BaGua {
     KUN("坤", "☷", "地", "000");
 
     /**
-     * 八卦名称
+     * 八卦名称（数据库映射字段）
      */
+    @EnumValue
     private final String name;
     
     /**
