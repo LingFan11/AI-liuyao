@@ -6,7 +6,6 @@ import com.lingfan.liuyao.model.entity.User;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -118,9 +117,9 @@ public class UserProfileResponse implements Serializable {
     private Integer totalDivinationCount;
     
     /**
-     * 最后占卜日期
+     * 最后占卜时间（精确到秒，包含日期信息）
      */
-    private LocalDate lastDivinationDate;
+    private LocalDateTime lastDivinationTime;
     
     // ==================== 账号信息 ====================
     
@@ -179,7 +178,7 @@ public class UserProfileResponse implements Serializable {
         response.setDailyDivinationCount(user.getDailyDivinationCount());
         response.setRemainingDivinationCount(calculateRemainingCount(user));
         response.setTotalDivinationCount(user.getTotalDivinationCount());
-        response.setLastDivinationDate(user.getLastDivinationDate());
+        response.setLastDivinationTime(user.getLastDivinationTime());
         
         // 账号信息
         response.setStatus(user.getStatus());

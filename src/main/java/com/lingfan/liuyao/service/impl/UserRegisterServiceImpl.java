@@ -156,7 +156,7 @@ public class UserRegisterServiceImpl implements UserRegisterService {
         // 初始化占卜次数
         user.setDailyDivinationCount(0);
         user.setTotalDivinationCount(0);
-        user.setLastDivinationDate(null);
+        user.setLastDivinationTime(null);
         
         // 初始化账号状态
         user.setStatus(0);

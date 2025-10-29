@@ -101,12 +101,8 @@ public class User implements Serializable {
     private Integer totalDivinationCount;
     
     /**
-     * 最后占卜日期
-     */
-    private LocalDate lastDivinationDate;
-    
-    /**
-     * 最后占卜时间（精确到秒）
+     * 最后占卜时间（精确到秒，包含日期信息）
+     * 需要日期时使用: lastDivinationTime.toLocalDate()
      */
     private LocalDateTime lastDivinationTime;
     
