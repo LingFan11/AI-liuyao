@@ -26,6 +26,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -76,12 +78,15 @@ public class DivinationServiceImpl implements DivinationService {
      * 业务流程：
      * 1. 验证用户信息
      * 2. 验证并扣除起卦次数（原子操作）
-     * 3. 获取起卦方法
-     * 4. 执行起卦
-     * 5. 构建上下文
-     * 6. 保存hexagrams表
-     * 7. 保存divination_histories表
-     * 8. 更新用户统计
+     * 3. 注册事务同步回调（事务回滚时自动回滚Redis计数）
+     * 4. 获取起卦方法
+     * 5. 执行起卦
+     * 6. 构建上下文
+     * 7. 保存hexagrams表
+     * 8. 保存divination_histories表
+     * 9. 更新用户统计
+     * 
+     * 注意：使用TransactionSynchronizationManager确保Redis和DB事务一致性
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -89,54 +94,75 @@ public class DivinationServiceImpl implements DivinationService {
         log.info("开始起卦，userId={}, methodType={}, zhanBuType={}", 
                 userId, request.getMethodType(), request.getZhanBuLeiXing());
         
-        try {
-            // 1. 验证用户信息
-            User user = validateUser(userId);
-            
-            // 2. 验证并扣除起卦次数（原子操作，失败会回滚）
-            validateAndDeductTimes(userId, user);
-            
-            // 3. 获取起卦方法（从工厂）
-            DivinationMethod method = divinationFactory.getMethod(request.getMethodType());
-            
-            // 4. 执行起卦
-            DivinationResult result = method.cast(request);
-            
-            // 5. 构建起卦上下文（包含完整信息）
-            DivinationContext context = buildDivinationContext(request, result);
-            
-            // 6. 保存起卦记录到hexagrams表
-            Long hexagramId = saveHexagram(userId, context, request, result);
-            log.info("起卦记录已保存，hexagramId={}", hexagramId);
-            
-            // 7. 保存历史记录到divination_histories表
-            saveDivinationHistory(userId, hexagramId);
-            log.info("历史记录已保存");
-            
-            // 8. 更新用户统计
-            updateUserStats(userId);
-            
-            log.info("起卦完成，userId={}, benGua={}, bianGua={}", 
-                    userId, 
-                    result.getBenGua().getGuaName(), 
-                    result.getBianGua() != null ? result.getBianGua().getGuaName() : "无");
-            
-            return context;
-            
-        } catch (BusinessException e) {
-            // 业务异常，回滚次数扣除
-            rollbackDivinationTimes(userId);
-            throw e;
-        } catch (Exception e) {
-            // 其他异常，回滚次数扣除
-            rollbackDivinationTimes(userId);
-            log.error("起卦失败，userId={}", userId, e);
-            throw new BusinessException("起卦失败：" + e.getMessage());
+        // 1. 验证用户信息
+        User user = validateUser(userId);
+        
+        // 2. 验证并扣除起卦次数（原子操作）
+        validateAndDeductTimes(userId, user);
+        
+        // 3. 注册事务回滚回调：如果事务回滚，自动回滚Redis计数
+        registerTransactionRollbackCallback(userId);
+        
+        // 4. 获取起卦方法（从工厂）
+        DivinationMethod method = divinationFactory.getMethod(request.getMethodType());
+        
+        // 5. 执行起卦
+        DivinationResult result = method.cast(request);
+        
+        // 6. 构建起卦上下文（包含完整信息）
+        DivinationContext context = buildDivinationContext(request, result);
+        
+        // 7. 保存起卦记录到hexagrams表
+        Long hexagramId = saveHexagram(userId, context, request, result);
+        log.info("起卦记录已保存，hexagramId={}", hexagramId);
+        
+        // 8. 保存历史记录到divination_histories表
+        saveDivinationHistory(userId, hexagramId);
+        log.info("历史记录已保存");
+        
+        // 9. 更新用户统计
+        updateUserStats(userId);
+        
+        log.info("起卦完成，userId={}, benGua={}, bianGua={}", 
+                userId, 
+                result.getBenGua().getGuaName(), 
+                result.getBianGua() != null ? result.getBianGua().getGuaName() : "无");
+        
+        return context;
+    }
+    
+    /**
+     * 注册事务回滚回调
+     * 
+     * 使用Spring的TransactionSynchronizationManager，在事务回滚时自动回滚Redis计数
+     * 这样可以确保Redis和数据库的一致性，避免手动try-catch回滚
+     * 
+     * @param userId 用户ID
+     */
+    private void registerTransactionRollbackCallback(Long userId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    // 只在事务回滚时执行
+                    if (status == STATUS_ROLLED_BACK) {
+                        rollbackDivinationTimes(userId);
+                        log.warn("事务回滚，已自动回滚起卦次数，userId={}", userId);
+                    }
+                }
+            });
+        } else {
+            log.warn("当前无活跃事务，无法注册回滚回调，userId={}", userId);
         }
     }
     
     /**
      * 验证用户信息
+     * 
+     * 优化说明：
+     * - 先从Redis缓存读取，避免每次起卦都查数据库
+     * - 缓存未命中时查数据库，并写入缓存
+     * - 缓存时间30分钟（CacheConstants.USER_INFO_TTL）
      * 
      * @param userId 用户ID
      * @return 用户信息
@@ -147,12 +173,25 @@ public class DivinationServiceImpl implements DivinationService {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "用户ID不能为空");
         }
         
-        User user = userMapper.selectById(userId);
+        // 1. 先从缓存读取
+        String cacheKey = CacheConstants.USER_INFO_PREFIX + userId;
+        User user = redisUtil.getObject(cacheKey, User.class);
+        
+        // 2. 缓存未命中，查数据库
         if (user == null) {
-            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+            user = userMapper.selectById(userId);
+            if (user == null) {
+                throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+            }
+            
+            // 写入缓存
+            redisUtil.set(cacheKey, user, CacheConstants.USER_INFO_TTL);
+            log.debug("用户信息已缓存，userId={}", userId);
+        } else {
+            log.debug("用户信息缓存命中，userId={}", userId);
         }
         
-        // 验证用户状态
+        // 3. 验证用户状态
         if (BusinessConstants.ACCOUNT_STATUS_LOCKED == user.getStatus()) {
             throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
         }
@@ -166,6 +205,10 @@ public class DivinationServiceImpl implements DivinationService {
     /**
      * 验证并扣除起卦次数（原子操作）
      * 
+     * 优化说明：
+     * - 使用Lua脚本原子性执行increment和expire，消除if (usedTimes == 1)特殊分支
+     * - 避免increment和expire之间系统崩溃导致key永不过期
+     * 
      * @param userId 用户ID
      * @param user 用户信息
      * @throws BusinessException 次数不足
@@ -174,14 +217,12 @@ public class DivinationServiceImpl implements DivinationService {
         // 构建Redis Key：divination:times:{userId}:{date}
         String key = CacheConstants.DIVINATION_TIMES_PREFIX + userId + ":" + LocalDate.now();
         
-        // 原子操作：先增加，再检查
-        Long usedTimes = redisUtil.increment(key, 1);
+        // 计算到当天结束的秒数
+        long secondsUntilMidnight = getSecondsUntilMidnight();
         
-        // 如果是第一次访问，设置过期时间（当天结束）
-        if (usedTimes == 1) {
-            long secondsUntilMidnight = getSecondsUntilMidnight();
-            redisUtil.expire(key, secondsUntilMidnight, TimeUnit.SECONDS);
-        }
+        // 原子操作：increment + expire（Lua脚本）
+        // 无需if (usedTimes == 1)特殊分支，每次都设置过期时间
+        Long usedTimes = redisUtil.incrementAndExpire(key, 1, secondsUntilMidnight);
         
         // 获取用户每日限额
         int dailyLimit = getUserDailyLimit(user);
@@ -394,12 +435,16 @@ public class DivinationServiceImpl implements DivinationService {
      * @param userId 用户ID
      */
     private void updateUserStats(Long userId) {
-        // 更新用户最后占卜时间
+        // 更新用户最后占卜时间（包含日期和时间信息）
         User user = new User();
         user.setId(userId);
-        user.setLastDivinationDate(LocalDate.now());
         user.setLastDivinationTime(LocalDateTime.now());
         userMapper.updateById(user);
+        
+        // 清除用户缓存，确保下次查询时获取最新数据
+        String cacheKey = CacheConstants.USER_INFO_PREFIX + userId;
+        redisUtil.delete(cacheKey);
+        log.debug("用户统计已更新，缓存已清除，userId={}", userId);
         
         // 注意：total_divination_count 在数据库层面已有触发器或应用层统计
         // 这里暂不处理，避免并发问题
@@ -452,7 +497,6 @@ public class DivinationServiceImpl implements DivinationService {
         stats.put("todayRemaining", todayRemaining);
         stats.put("dailyLimit", dailyLimit);
         stats.put("totalCount", totalCount != null ? totalCount : 0);
-        stats.put("lastDate", user.getLastDivinationDate());
         stats.put("lastTime", user.getLastDivinationTime());
         stats.put("vipType", user.getVipType());
         

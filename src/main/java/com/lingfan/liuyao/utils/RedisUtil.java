@@ -3,11 +3,14 @@ package com.lingfan.liuyao.utils;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.lingfan.liuyao.exception.BusinessException;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -445,6 +448,49 @@ public class RedisUtil {
      */
     public Long decrement(String key, long delta) {
         return stringRedisTemplate.opsForValue().decrement(key, delta);
+    }
+    
+    /**
+     * 原子性递增并设置过期时间（使用Lua脚本）
+     * 
+     * 解决问题：
+     * - 消除if (count == 1) then expire(key)的特殊分支
+     * - 保证increment和expire的原子性
+     * - 避免increment后系统崩溃导致key永不过期
+     * 
+     * Lua脚本逻辑：
+     * 1. INCRBY key delta
+     * 2. EXPIRE key seconds
+     * 3. 返回递增后的值
+     * 
+     * @param key 键
+     * @param delta 增量
+     * @param seconds 过期时间（秒）
+     * @return 递增后的值
+     */
+    public Long incrementAndExpire(String key, long delta, long seconds) {
+        // Lua脚本：原子性执行increment和expire
+        String luaScript = 
+            "local current = redis.call('INCRBY', KEYS[1], ARGV[1]) " +
+            "redis.call('EXPIRE', KEYS[1], ARGV[2]) " +
+            "return current";
+        
+        DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>();
+        redisScript.setScriptText(luaScript);
+        redisScript.setResultType(Long.class);
+        
+        // 执行Lua脚本
+        Long result = stringRedisTemplate.execute(
+            redisScript,
+            Collections.singletonList(key),
+            String.valueOf(delta),
+            String.valueOf(seconds)
+        );
+        
+        log.debug("原子性递增并设置过期时间：key={}, delta={}, seconds={}, result={}", 
+                key, delta, seconds, result);
+        
+        return result;
     }
     
     // ========== 分布式锁 ==========
